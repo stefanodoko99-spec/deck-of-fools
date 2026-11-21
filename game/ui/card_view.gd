@@ -704,6 +704,9 @@ func _draw_named(r: Rect2) -> void:
 	var art: JesterArt = null
 	if art_texture != null:
 		_draw_art(art_texture, window, pane)
+		# Keep the effect badge (Mult, Chips, ...) that the drawn figures carry.
+		art = JesterArt.new(self)
+		art.prepare_badge(window, def_id)
 	elif kind == "zanni" and JesterArt.has_design(def_id):
 		art = JesterArt.new(self)
 		art.defer_badge = true

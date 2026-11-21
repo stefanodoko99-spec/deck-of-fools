@@ -99,6 +99,13 @@ func draw_design(window: Rect2, pane: PackedVector2Array, d: Array, n: int) -> v
 		draw_badge()
 
 
+## Set up only the effect badge, for a card showing illustrated art instead of the
+## drawn figure; the card then calls draw_badge() after its frame.
+func prepare_badge(window: Rect2, def_id: String) -> void:
+	w = window
+	badge_effect = str(JesterDesigns.DESIGNS[def_id][9]) if has_design(def_id) else ""
+
+
 ## The effect badge sits in the window's top-left corner. Cards draw it after their
 ## frame (`defer_badge`) so the arch's corner does not cover it.
 func draw_badge() -> void:
