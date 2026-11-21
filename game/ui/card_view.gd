@@ -15,6 +15,8 @@ const KIND_COLOURS := {
 }
 
 const RARITY_COLOURS := [Color("3f74c4"), Color("2f9a5a"), Color("c43a4a"), Color("c8962a")]
+## Lacquered card bodies by rarity: Venetian blue, emerald, carmine and burnished gold.
+const RARITY_LACQUER := [Color("1f5a9a"), Color("157a52"), Color("a3152f"), Color("8a5a12")]
 
 const BACKDROPS := [Color("2a1240"), Color("0e2a44"), Color("3a0f1c"), Color("0f3a2e"), Color("3a2a0c"), Color("1c1c4a")]
 const EDITION_COLOURS := {
@@ -67,6 +69,8 @@ var sticker := ""
 var selected := false
 var dimmed := false
 var face_down := false
+## Card back to draw; -1 follows the player's setting.
+var back_style := -1
 var price_text := ""
 
 var tag: Dictionary = {}
@@ -132,7 +136,7 @@ func set_art(texture: Texture2D) -> void:
 func art_key() -> String:
 	var face := ""
 	if face_down:
-		face = "back%d" % Settings.card_back
+		face = "back%d" % _back_index()
 	elif kind == "card":
 		face = "card %d %d %s %s %s" % [card.rank, card.suit, card.enhancement, edition, card.seal]
 	else:
@@ -148,6 +152,7 @@ func baked_copy() -> CardView:
 	copy.edition = edition
 	copy.sticker = sticker
 	copy.face_down = face_down
+	copy.back_style = _back_index()
 	copy.baking = true
 	return copy
 
@@ -283,8 +288,8 @@ static func _round_rect(r: Rect2, radius: float) -> PackedVector2Array:
 
 
 func _poly(points: PackedVector2Array, colour: Color) -> void:
-	draw_colored_polygon(points, colour)
-	_outline(points, colour, 0.7)
+	# Painted: lit from the top left with a fine sepia ink line.
+	Paint.shape(self, points, colour, maxf(0.45, size.x * 0.011))
 
 
 func _outline(points: PackedVector2Array, colour: Color, width: float) -> void:
@@ -313,16 +318,18 @@ func _dot(at: Vector2, radius: float, colour: Color) -> void:
 
 func _gloss(r: Rect2) -> void:
 	var w := r.size.x
-	draw_colored_polygon(PackedVector2Array([Vector2(3, 3), Vector2(w * 0.55, 3), Vector2(3, r.size.y * 0.4)]), Color(1, 1, 1, 0.1))
+	draw_polygon(PackedVector2Array([Vector2(3, 3), Vector2(w * 0.62, 3), Vector2(3, r.size.y * 0.46)]),
+		PackedColorArray([Color(1, 1, 1, 0.16), Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.0)]))
 
 
-
+func _back_index() -> int:
+	return back_style if back_style >= 0 else Settings.card_back
 
 
 func _draw_back(r: Rect2) -> void:
 	var body := _round_rect(r, 5.0)
 	var inner := r.grow(-maxf(3.0, r.size.x * 0.08))
-	match Settings.card_back:
+	match _back_index():
 		1:
 			_back_sun_and_moon(r, body, inner)
 		2:
@@ -335,8 +342,13 @@ func _draw_back(r: Rect2) -> void:
 			_back_filigree(r, body, inner)
 		_:
 			_back_harlequin(r, body, inner)
+	# Every back shares the same gilded edge, corner diamonds and a soft vignette.
+	var k := r.size.x / 60.0
+	Paint.vignette(self, r.grow(-1.0), Color(0, 0, 0, 0.32), r.size.x * 0.16)
+	Paint.gold_line(self, Paint.round_rect(r.grow(-1.6 * k), 4.2 * k), maxf(0.6, 0.85 * k))
+	for corner in [inner.position, Vector2(inner.end.x, inner.position.y), inner.end, Vector2(inner.position.x, inner.end.y)]:
+		Paint.gold(self, Paint.diamond(corner, 1.7 * k, 2.4 * k), 0.4)
 	_gloss(r)
-
 
 
 static func _scatter(area: Rect2, n: int) -> Vector2:
@@ -522,106 +534,151 @@ func _back_filigree(r: Rect2, body: PackedVector2Array, inner: Rect2) -> void:
 
 func _draw_playing(r: Rect2) -> void:
 	var enh_def := ContentDB.get_def(card.enhancement)
-	var paper := UiTheme.CARD
+	var paper := Paint.PARCHMENT
 	if card.enhancement == "enh_marble":
-		paper = Color("a4a4ac")
+		paper = Color("bdb9c2")
 	elif enh_def != null:
-		paper = UiTheme.CARD.lerp(_enhancement_tint(card.enhancement), 0.32)
-	var body := _round_rect(r, 5.0)
-	_gradient(body, paper.lightened(0.1), paper.darkened(0.08))
-	_outline(body, EDGE, 1.1)
-	_outline(_round_rect(r.grow(-3.0), 3.0), PAPER_LINE, 0.6)
+		paper = Paint.PARCHMENT.lerp(_enhancement_tint(card.enhancement), 0.3)
 	var k := r.size.x / 60.0
+	var body := _round_rect(r, 5.0)
+	_gradient(body, paper.lightened(0.14), paper.darkened(0.1))
+	Paint.grain(self, r, Paint.PARCHMENT_EDGE.darkened(0.45), 36)
+	Paint.vignette(self, r.grow(-0.5), Color(Paint.PARCHMENT_EDGE.darkened(0.15), 0.45), r.size.x * 0.13)
+	_outline(body, Paint.INK.lightened(0.2), 1.0)
+	var colour := UiTheme.RED_SUIT if card.suit == PlayingCard.Suit.HEARTS or card.suit == PlayingCard.Suit.DIAMONDS else UiTheme.BLACK_SUIT
+	# Gilded frame with a fine inner rule in the suit's colour.
+	var frame := r.grow(-2.6 * k)
+	Paint.gold_line(self, Paint.round_rect(frame, 3.6 * k), maxf(0.55, 0.8 * k))
+	_outline(Paint.round_rect(r.grow(-4.4 * k), 2.4 * k), Color(colour, 0.3), maxf(0.4, 0.45 * k))
 	if card.has_rank():
-		var colour := UiTheme.RED_SUIT if card.suit == PlayingCard.Suit.HEARTS or card.suit == PlayingCard.Suit.DIAMONDS else UiTheme.BLACK_SUIT
-		_draw_index(k, colour)
-		draw_set_transform(r.size, PI)
-		_draw_index(k, colour)
-		draw_set_transform(Vector2.ZERO)
 		if card.enhancement == "enh_motley":
 			for s in 4:
 				draw_suit(self, r.get_center() + Vector2(((s % 2) - 0.5) * 18 * k, (int(s / 2) - 0.5) * 22 * k), 7.0 * k, s, [UiTheme.BLACK_SUIT, UiTheme.RED_SUIT][s % 2])
 		elif card.rank >= 11 and card.rank <= 13:
 			_draw_face(r, k, colour)
 		elif card.rank == 14:
-			draw_arc(r.get_center(), 17.0 * k, 0.0, TAU, 32, colour.lerp(UiTheme.CARD, 0.6), 1.0, true)
-			draw_suit(self, r.get_center(), 13.0 * k, card.suit, colour)
+			_draw_ace(r, k, colour)
 		else:
-			var area := Rect2(Vector2(18, 18) * k, r.size - Vector2(36, 36) * k)
+			var area := Rect2(Vector2(19.5, 19.0) * k, r.size - Vector2(39.0, 38.0) * k)
 			for pip in PIPS.get(card.rank, []):
 				var at := area.position + Vector2(area.size.x * pip[0] / 2.0, area.size.y * pip[1])
-				draw_suit(self, at, 5.0 * k, card.suit, colour)
+				draw_suit(self, at, 4.8 * k, card.suit, colour)
+		_draw_index(k, colour)
+		draw_set_transform(r.size, PI)
+		_draw_index(k, colour)
+		draw_set_transform(Vector2.ZERO)
 	else:
-		draw_string(UiTheme.font, Vector2(4, r.size.y / 2.0 + 4), "MARBLE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, 10, INK)
+		draw_string(UiTheme.display, Vector2(4, r.size.y / 2.0 + 4 * k), "MARBLE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, int(round(9 * k)), Paint.INK)
 	if enh_def != null and card.enhancement != "enh_marble":
-		var band := Rect2(Vector2(4, r.size.y - 14), Vector2(r.size.x - 8, 10))
-		draw_colored_polygon(_round_rect(band, 2.0), _enhancement_tint(card.enhancement).darkened(0.3))
+		var band := Rect2(Vector2(5 * k, r.size.y - 15 * k), Vector2(r.size.x - 10 * k, 10 * k))
+		var tint := _enhancement_tint(card.enhancement).darkened(0.25)
+		_gradient(_round_rect(band, 2.0), tint.lightened(0.15), tint.darkened(0.2))
+		Paint.gold_line(self, _round_rect(band, 2.0), maxf(0.4, 0.45 * k))
 		var short := UiTheme.name_of(card.enhancement).to_upper()
-		draw_string(UiTheme.font, band.position + Vector2(0, 8), short, HORIZONTAL_ALIGNMENT_CENTER, band.size.x, 8, UiTheme.TEXT)
+		draw_string(UiTheme.bold, band.position + Vector2(0, band.size.y * 0.78), short, HORIZONTAL_ALIGNMENT_CENTER, band.size.x, int(round(7.5 * k)), UiTheme.TEXT)
 	if SEAL_COLOURS.has(card.seal):
-		var at := Vector2(r.size.x - 9 * k, 9 * k)
-		_dot(at, 4.8 * k, SEAL_COLOURS[card.seal].darkened(0.45))
-		_dot(at, 3.8 * k, SEAL_COLOURS[card.seal])
+		var at := Vector2(r.size.x - 10 * k, 10 * k)
+		Paint.glow(self, at, 6.0 * k, Color(SEAL_COLOURS[card.seal], 0.5), 4)
+		Paint.gold(self, Paint.round_rect(Rect2(at - Vector2(4.6, 4.6) * k, Vector2(9.2, 9.2) * k), 4.6 * k), 0.4)
+		_dot(at, 3.6 * k, SEAL_COLOURS[card.seal])
 		_dot(at + Vector2(-1.2, -1.2) * k, 1.2 * k, Color(1, 1, 1, 0.6))
 	_gloss(r)
 
 
-
 func _draw_index(k: float, colour: Color) -> void:
 	var rank_text := str(RANKS.get(card.rank, card.rank))
-	draw_string(UiTheme.font, Vector2(4, 14) * k, rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(14 * k)), colour)
-	draw_suit(self, Vector2(9, 21) * k, 3.5 * k, card.suit, colour)
-
-
+	var font_size := int(round((12.5 if rank_text.length() > 1 else 15.0) * k))
+	# A pale halo keeps the number crisp where it crosses a portrait or a pip.
+	draw_string_outline(UiTheme.display, Vector2(4.2, 15.5) * k, rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, maxi(2, int(round(2.4 * k))), Color(Paint.PARCHMENT, 0.9))
+	draw_string(UiTheme.display, Vector2(4.2, 15.5) * k, rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, colour)
+	draw_suit(self, Vector2(9.2, 22.5) * k, 3.8 * k, card.suit, colour)
 
 
 func _draw_face(r: Rect2, k: float, colour: Color) -> void:
-	var frame := Rect2(Vector2(14, 14) * k, r.size - Vector2(28, 28) * k)
-	var back := _round_rect(frame, 2.0)
-	_gradient(back, colour.lerp(UiTheme.CARD, 0.82), colour.lerp(UiTheme.CARD, 0.6))
-	_outline(back, colour, 0.8)
-	var c := frame.get_center() + Vector2(0, 2 * k)
-	var s := frame.size.x * 0.44
-	var robe := PackedVector2Array([
-		Vector2(c.x - s * 0.95, frame.end.y), Vector2(c.x - s * 0.7, c.y + s * 0.55),
-		Vector2(c.x, c.y + s * 0.4), Vector2(c.x + s * 0.7, c.y + s * 0.55), Vector2(c.x + s * 0.95, frame.end.y),
-	])
-	_poly(robe, colour)
-	draw_line(Vector2(c.x, c.y + s * 0.45), Vector2(c.x, frame.end.y), UiTheme.GOLD, 1.2 * k, true)
-	_draw_ruff(c + Vector2(0, s * 0.5), s * 0.9, UiTheme.CARD.darkened(0.05))
-	_draw_head(c, s, SKINS[1], card.rank * 7)
-	if card.rank == 11:
-		_draw_cap(c, s, colour, UiTheme.GOLD, 2)
-	else:
-		_draw_crown(c, s, colour, 0.55 if card.rank == 13 else 0.36)
-	draw_suit(self, frame.position + Vector2(5, 6) * k, 3.0 * k, card.suit, colour)
+	# A painted court figure in an arched Venetian window: the King is the Doge,
+	# the Queen a masked noblewoman, the Jack Arlecchino.
+	var window := Rect2(Vector2(13.5, 11.0) * k, r.size - Vector2(27.0, 22.0) * k)
+	var pane := Paint.arch(window, 0.6)
+	JesterArt.new(self).draw_design(window, pane, JesterArt.court_design(card.rank, card.suit), card.rank * 31 + card.suit)
+	_cover_outside(window, pane, func(y: float) -> Color: return Paint.PARCHMENT.lightened(0.14).lerp(Paint.PARCHMENT.darkened(0.1), y / r.size.y))
+	Paint.gold_line(self, pane, maxf(0.6, 0.9 * k))
 
 
+func _draw_ace(r: Rect2, k: float, colour: Color) -> void:
+	var c := r.get_center()
+	Paint.glow(self, c, 22.0 * k, Color(Paint.GOLD_HI, 0.7))
+	for i in 16:
+		var a := i * TAU / 16.0
+		var side := Vector2(cos(a + PI / 2.0), sin(a + PI / 2.0)) * (1.6 if i % 2 == 0 else 1.0) * k
+		var tip := c + Vector2(cos(a), sin(a)) * (22.0 if i % 2 == 0 else 19.5) * k
+		var base := c + Vector2(cos(a), sin(a)) * 16.5 * k
+		Paint.gold(self, PackedVector2Array([base + side, tip, base - side]), 0.3)
+	var disc := PackedVector2Array()
+	for i in 32:
+		disc.append(c + Vector2(cos(i * TAU / 32.0), sin(i * TAU / 32.0)) * 16.0 * k)
+	_gradient(disc, Paint.PARCHMENT.lightened(0.2), Paint.PARCHMENT.darkened(0.08))
+	Paint.gold_line(self, disc, maxf(0.6, 1.0 * k))
+	draw_suit(self, c, 11.5 * k, card.suit, colour)
+
+
+## Fill the parts of `window` outside `pane` (an arch's corners) so a figure that
+## spilled past the arch looks tucked behind the frame. `colour_at(y)` matches the card body.
+func _cover_outside(window: Rect2, pane: PackedVector2Array, colour_at: Callable) -> void:
+	var box := PackedVector2Array([window.position, Vector2(window.end.x, window.position.y), window.end, Vector2(window.position.x, window.end.y)])
+	for piece in Geometry2D.clip_polygons(box, pane):
+		# Only the two small corners; never anything that could be the whole window.
+		if absf(_area(piece)) > window.get_area() * 0.3:
+			continue
+		var colours := PackedColorArray()
+		for p in piece:
+			colours.append(colour_at.call(p.y))
+		draw_polygon(piece, colours)
+
+
+static func _area(points: PackedVector2Array) -> float:
+	var sum := 0.0
+	for i in points.size():
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		sum += a.x * b.y - b.x * a.y
+	return sum / 2.0
 
 
 func _draw_named(r: Rect2) -> void:
 	var def := ContentDB.get_def(def_id)
 	var colour: Color = KIND_COLOURS.get(kind, UiTheme.PANEL_LIGHT)
+	var rarity := 0
 	if kind == "zanni" and def != null:
-		colour = RARITY_COLOURS[clampi(def.rarity, 0, 3)]
+		rarity = clampi(def.rarity, 0, 3)
+		colour = RARITY_LACQUER[rarity]
+	var k := r.size.x / 60.0
+	var top := colour.lightened(0.24)
+	var low := colour.darkened(0.38)
 	var body := _round_rect(r, 5.0)
-	_gradient(body, colour.lightened(0.18), colour.darkened(0.2))
-	_outline(body, colour.lightened(0.5), 1.1)
-	var window := Rect2(Vector2(4, 4), Vector2(r.size.x - 8, r.size.y * 0.6))
-	var pane := _round_rect(window, 3.0)
+	_gradient(body, top, low)
+	# Faint gold damask over the lacquer.
+	for i in 26:
+		Paint.lit(self, Paint.diamond(_scatter(r.grow(-3.0 * k), i + 3), 1.6 * k, 2.4 * k), Color(Paint.GOLD_HI, 0.1))
+	Paint.gold_line(self, Paint.round_rect(r.grow(-1.8 * k), 4.2 * k), maxf(0.55, 0.8 * k))
+	var window := Rect2(Vector2(5.0, 5.0) * k, Vector2(r.size.x - 10.0 * k, r.size.y * 0.6 - 1.0 * k))
+	var pane := Paint.arch(window, 0.56)
 	var seed_value := absi(def_id.hash())
+	var art: JesterArt = null
 	if kind == "zanni" and JesterArt.has_design(def_id):
-		JesterArt.new(self).draw(window, pane, def_id)
+		art = JesterArt.new(self)
+		art.defer_badge = true
+		art.draw(window, pane, def_id)
 	else:
 		_draw_picture(window, pane, colour, seed_value)
-	var rarity := clampi(def.rarity, 0, 3) if kind == "zanni" and def != null else 0
+	_cover_outside(window, pane, func(y: float) -> Color: return top.lerp(low, y / r.size.y))
 	_draw_frame_marks(r, window, pane, colour, rarity, kind == "zanni" and def != null)
-	_draw_ribbon(r, window.end.y + 4, colour)
+	if art != null:
+		art.draw_badge()
+	_draw_ribbon(r, window.end.y + 2.5 * k, colour)
 	if sticker != "":
-		draw_string(UiTheme.font, Vector2(7, 13), sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, UiTheme.GOLD)
+		draw_string_outline(UiTheme.bold, Vector2(7, 13) * k, sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(10 * k)), 2, Paint.INK)
+		draw_string(UiTheme.bold, Vector2(7, 13) * k, sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(10 * k)), Paint.GOLD_HI)
 	_gloss(r)
-
-
 
 
 func _draw_picture(window: Rect2, pane: PackedVector2Array, colour: Color, seed_value: int) -> void:
@@ -643,52 +700,84 @@ func _draw_picture(window: Rect2, pane: PackedVector2Array, colour: Color, seed_
 			_draw_pack(window, colour)
 		"warrant":
 			_draw_scroll(window)
+		"patron":
+			# Each Patron gets a stern masked Venetian noble, chosen from its id.
+			var n := seed_value
+			var design := [
+				["wine", "night", "slate", "ink", "rust", "plum"][n % 6],
+				["curtain", "rays", "plain", "lattice"][(n / 7) % 4],
+				["doge", "tricorne", "bicorne", "tophat", "crown", "wig", "hood"][(n / 11) % 7],
+				["bauta", "volto", "moretta", "gold", "half", "none"][(n / 13) % 6],
+				["frown", "smirk", "sleepy"][(n / 17) % 3],
+				["robe", "cape", "sash", "gown"][(n / 19) % 4],
+				["crimson", "black", "navy", "purple", "gold"][(n / 23) % 5],
+				["gold", "silver", "black"][(n / 29) % 3],
+				["coins", "goblet", "scroll", "key", "book", "quill"][(n / 31) % 6],
+				"", "",
+			]
+			JesterArt.new(self).draw_design(window, pane, design, n)
+		"favor":
+			var c := window.get_center() + Vector2(0, window.size.y * 0.04)
+			var rad := window.size.x * 0.32
+			Paint.glow(self, c, rad * 1.4, Color(Paint.GOLD_HI, 0.5))
+			for side in [-1.0, 1.0]:
+				for i in 6:
+					var a: float = PI / 2.0 + side * (0.4 + i * 0.4)
+					var at: Vector2 = c + Vector2(cos(a), sin(a)) * rad
+					var along := Vector2(cos(a + side * PI / 2.0), sin(a + side * PI / 2.0))
+					_leaf(at, at + along.rotated(-side * 0.6) * rad * 0.45, rad * 0.22, Color("6f9a32") if i % 2 == 0 else Color("c9a43a"))
+			_draw_star(c, rad * 0.45, Paint.GOLD)
 
 
 
 
 func _draw_frame_marks(r: Rect2, window: Rect2, pane: PackedVector2Array, colour: Color, rarity: int, gems: bool) -> void:
+	var k := r.size.x / 60.0
 	if rarity == 3:
 		var sheen := PackedColorArray()
 		var hues := [Color("ff8fd0"), Color("7fffd4"), Color("f0d060"), Color("8fb0ff")]
 		for i in pane.size():
-			sheen.append(Color(hues[i % hues.size()], 0.16))
+			sheen.append(Color(hues[i % hues.size()], 0.14))
 		draw_polygon(pane, sheen)
-	_outline(pane, UiTheme.GOLD if rarity >= 2 else colour.lightened(0.3), 0.9 if rarity >= 2 else 0.7)
-	if rarity == 3:
-		_outline(_round_rect(r.grow(-2.0), 4.0), UiTheme.GOLD, 0.8)
+	Paint.gold_line(self, pane, maxf(0.6, (1.2 if rarity >= 2 else 0.9) * k))
 	if rarity >= 2:
-		for corner in [Vector2(3, 3), Vector2(r.size.x - 3, 3), Vector2(3, r.size.y - 3), Vector2(r.size.x - 3, r.size.y - 3)]:
-			_poly(_diamond(corner, 2.4, 2.4), UiTheme.GOLD)
+		for corner in [Vector2(3.4, 3.4) * k, Vector2(r.size.x - 3.4 * k, 3.4 * k), Vector2(3.4 * k, r.size.y - 3.4 * k), r.size - Vector2(3.4, 3.4) * k]:
+			Paint.gold(self, Paint.diamond(corner, 2.2 * k, 2.8 * k), 0.4)
 	if gems:
 		for i in rarity + 1:
-			var at := Vector2(r.size.x / 2.0 + (i - rarity / 2.0) * 7.0, window.end.y)
-			_poly(_diamond(at, 2.8, 3.6), UiTheme.GOLD.darkened(0.35))
-			_poly(_diamond(at, 2.0, 2.8), UiTheme.GOLD)
-
+			var at := Vector2(r.size.x / 2.0 + (i - rarity / 2.0) * 7.0 * k, window.end.y)
+			Paint.gold(self, Paint.diamond(at, 3.0 * k, 3.8 * k), 0.4)
+			Paint.lit(self, Paint.diamond(at, 1.7 * k, 2.3 * k), [Color("3f8ed8"), Color("2fbf7a"), Color("e0304c"), Color("fff2c0")][rarity], 1.4)
 
 
 func _draw_ribbon(r: Rect2, top: float, colour: Color) -> void:
+	# The name on a parchment scroll, in dark ink.
 	var title := UiTheme.name_of(def_id) if def_id != "" else ""
-
-	var font_size := 8
-	var lines := _wrap(title, r.size.x - 10, font_size)
-	while font_size > 5 and (lines.size() > 2 or _widest(lines, font_size) > r.size.x - 8):
+	var k := r.size.x / 60.0
+	var font_size := int(round(9.0 * k))
+	var lines := _wrap(title, r.size.x - 12 * k, font_size)
+	while font_size > 5 and (lines.size() > 2 or _widest(lines, font_size) > r.size.x - 10 * k):
 		font_size -= 1
-		lines = _wrap(title, r.size.x - 10, font_size)
+		lines = _wrap(title, r.size.x - 12 * k, font_size)
 	lines = lines.slice(0, 3)
 	var line_h := font_size + 1.0
-	var h := maxf(12.0, lines.size() * line_h + 4.0)
-	var x0 := 2.0
-	var x1 := r.size.x - 2.0
+	var h := maxf(12.0 * k, lines.size() * line_h + 4.0)
+	var x0 := 2.5 * k
+	var x1 := r.size.x - 2.5 * k
+	var curl := 3.5 * k
+	for side in [-1.0, 1.0]:
+		var edge: float = x0 if side < 0 else x1
+		var tail := PackedVector2Array([Vector2(edge, top + h * 0.2), Vector2(edge - side * curl, top + h * 0.2 + curl * 0.6), Vector2(edge - side * curl, top + h + curl * 0.6), Vector2(edge, top + h)])
+		_gradient(tail, Paint.PARCHMENT_EDGE, Paint.PARCHMENT_EDGE.darkened(0.35))
 	var band := PackedVector2Array([
-		Vector2(x0, top), Vector2(x1, top), Vector2(x1 - 3, top + h / 2.0), Vector2(x1, top + h),
-		Vector2(x0, top + h), Vector2(x0 + 3, top + h / 2.0),
+		Vector2(x0 + curl * 0.4, top), Vector2(x1 - curl * 0.4, top), Vector2(x1 - curl, top + h / 2.0), Vector2(x1 - curl * 0.4, top + h),
+		Vector2(x0 + curl * 0.4, top + h), Vector2(x0 + curl, top + h / 2.0),
 	])
-	_poly(band, colour.darkened(0.5))
-	var y := top + 1.0 + line_h
+	_gradient(band, Paint.PARCHMENT.lightened(0.1), Paint.PARCHMENT.darkened(0.12))
+	Paint.ink(self, band, Paint.PARCHMENT_EDGE, maxf(0.4, 0.5 * k))
+	var y := top + 1.0 + line_h * 0.9
 	for line in lines:
-		draw_string(UiTheme.font, Vector2(4, y), line, HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, font_size, UiTheme.TEXT)
+		draw_string(UiTheme.bold, Vector2(4 * k, y), line, HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8 * k, font_size, Paint.INK)
 		y += line_h
 
 
@@ -977,7 +1066,7 @@ func _wrap(text: String, width: float, font_size: int) -> Array:
 	var current := ""
 	for word in text.split(" "):
 		var attempt := word if current == "" else current + " " + word
-		if UiTheme.font.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width and current != "":
+		if UiTheme.bold.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width and current != "":
 			lines.append(current)
 			current = word
 		else:
@@ -1008,26 +1097,48 @@ func _enhancement_tint(enh: String) -> Color:
 
 
 static func draw_suit(canvas: CanvasItem, c: Vector2, s: float, suit: int, colour: Color) -> void:
-	var circle := func(at: Vector2, radius: float) -> void: canvas.draw_circle(at, radius, colour, true, -1.0, true)
-	var shape := func(points: PackedVector2Array) -> void:
-		canvas.draw_colored_polygon(points, colour)
-		var closed := points.duplicate()
-		closed.append(points[0])
-		canvas.draw_polyline(closed, colour, 0.6, true)
+	# Painted suit: one light falls across the whole symbol from above, with a small
+	# gloss on the upper left, so circles and triangles read as a single shape.
+	var shade := func(p: Vector2) -> Color:
+		var t := clampf((p.y - (c.y - s)) / (2.0 * s), 0.0, 1.0)
+		return colour.lightened(0.3 * (0.45 - t)) if t < 0.45 else colour.darkened(0.32 * (t - 0.45))
+	var fill := func(points: PackedVector2Array) -> void:
+		var colours := PackedColorArray()
+		for p in points:
+			colours.append(shade.call(p))
+		canvas.draw_polygon(points, colours)
+	var circle := func(at: Vector2, radius: float) -> void:
+		var points := PackedVector2Array()
+		for i in 18:
+			points.append(at + Vector2(cos(i * TAU / 18.0), sin(i * TAU / 18.0)) * radius)
+		fill.call(points)
+	var gloss_at := c + Vector2(-s * 0.4, -s * 0.35)
 	match suit:
 		PlayingCard.Suit.HEARTS:
 			circle.call(c + Vector2(-s * 0.45, -s * 0.2), s * 0.5)
 			circle.call(c + Vector2(s * 0.45, -s * 0.2), s * 0.5)
-			shape.call(PackedVector2Array([c + Vector2(-s * 0.93, -s * 0.05), c + Vector2(s * 0.93, -s * 0.05), c + Vector2(0, s)]))
+			fill.call(PackedVector2Array([c + Vector2(-s * 0.93, -s * 0.05), c + Vector2(s * 0.93, -s * 0.05), c + Vector2(0, s)]))
 		PlayingCard.Suit.DIAMONDS:
-			shape.call(PackedVector2Array([c + Vector2(0, -s), c + Vector2(s * 0.72, 0), c + Vector2(0, s), c + Vector2(-s * 0.72, 0)]))
+			fill.call(PackedVector2Array([c + Vector2(0, -s), c + Vector2(s * 0.72, 0), c + Vector2(0, s), c + Vector2(-s * 0.72, 0)]))
+			gloss_at = c + Vector2(-s * 0.18, -s * 0.38)
 		PlayingCard.Suit.SPADES:
 			circle.call(c + Vector2(-s * 0.45, s * 0.2), s * 0.5)
 			circle.call(c + Vector2(s * 0.45, s * 0.2), s * 0.5)
-			shape.call(PackedVector2Array([c + Vector2(-s * 0.93, s * 0.05), c + Vector2(s * 0.93, s * 0.05), c + Vector2(0, -s)]))
-			shape.call(PackedVector2Array([c + Vector2(0, s * 0.3), c + Vector2(s * 0.35, s), c + Vector2(-s * 0.35, s)]))
+			fill.call(PackedVector2Array([c + Vector2(-s * 0.93, s * 0.05), c + Vector2(s * 0.93, s * 0.05), c + Vector2(0, -s)]))
+			fill.call(PackedVector2Array([c + Vector2(0, s * 0.3), c + Vector2(s * 0.35, s), c + Vector2(-s * 0.35, s)]))
+			gloss_at = c + Vector2(-s * 0.42, s * 0.05)
 		PlayingCard.Suit.CLUBS:
 			circle.call(c + Vector2(0, -s * 0.45), s * 0.42)
 			circle.call(c + Vector2(-s * 0.45, s * 0.15), s * 0.42)
 			circle.call(c + Vector2(s * 0.45, s * 0.15), s * 0.42)
-			shape.call(PackedVector2Array([c + Vector2(0, 0), c + Vector2(s * 0.35, s), c + Vector2(-s * 0.35, s)]))
+			fill.call(PackedVector2Array([c + Vector2(0, 0), c + Vector2(s * 0.35, s), c + Vector2(-s * 0.35, s)]))
+			gloss_at = c + Vector2(-s * 0.12, -s * 0.62)
+	if s >= 2.5:
+		# A tilted oval of light; drawn as a polygon so it respects any transform already set.
+		var gloss := PackedVector2Array()
+		for i in 12:
+			var a := i * TAU / 12.0
+			gloss.append(gloss_at + Vector2(cos(a) * s * 0.22, sin(a) * s * 0.12).rotated(-0.6))
+		canvas.draw_colored_polygon(gloss, Color(1, 1, 1, 0.38))
+
+

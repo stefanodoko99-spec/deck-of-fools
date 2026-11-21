@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Deck of Fools</title>
+<meta name="description" content="What Deck of Fools stores about you, why, and how to delete it.">
+<meta name="theme-color" content="#1e0b3d">
+<link rel="icon" href="index.icon.png">
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png">
+<style>
+:root { --bg: #fbf6ec; --ink: #2b1b12; --muted: #6b5a4c; --accent: #a3122c; --gold: #b7862a; --card: #ffffff; --line: #e7dcc6; }
+@media (prefers-color-scheme: dark) { :root { --bg: #1e0b3d; --ink: #fbf3e4; --muted: #cbbfe0; --accent: #ff6f8e; --gold: #e2aa3e; --card: #2a1650; --line: #45357a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+header { padding: 40px 20px 24px; text-align: center; background: linear-gradient(160deg, #8e1230, #1e0b3d 70%); color: #fbf3e4; }
+header img { width: 72px; height: 72px; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+header h1 { margin: 12px 0 4px; font-size: 30px; letter-spacing: -.01em; }
+header p { margin: 0; color: #e8dcf6; }
+main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 20px 12px; margin: 16px 0; }
+h2 { font-size: 20px; margin: 18px 0 6px; color: var(--accent); }
+ul { padding-left: 20px; }
+li { margin: 6px 0; }
+.muted { color: var(--muted); font-size: 15px; }
+a { color: var(--accent); }
+footer { text-align: center; padding: 0 20px 40px; }
+footer a { margin: 0 10px; }
+</style>
+</head>
+<body>
+<header>
+  <img src="index.apple-touch-icon.png" alt="">
+  <h1>Privacy Policy</h1>
+  <p>Deck of Fools · effective 21 November 2026</p>
+</header>
+<main>
+  <section>
+    <h2>The short version</h2>
+    <p>Deck of Fools keeps only what it needs to run your game, save your progress and show leaderboards. There are no ads, no analytics and no tracking, and nothing is sold or shared for marketing. You can delete your account and its data at any time from inside the game.</p>
+  </section>
+
+  <section>
+    <h2>What we store</h2>
+    <ul>
+      <li><strong>A guest account</strong>, made automatically when you first play: a random ID and a name like “Guest 1346”. No email is needed.</li>
+      <li><strong>If you create an account</strong>: your email address, the name you choose, and your password, which is stored only as a salted PBKDF2 hash. If you sign in with Apple or Google, we store the account identifier they give us, not your password.</li>
+      <li><strong>Your progress</strong>: your saved game (unlocks, stats, settings) so it can follow you to other devices.</li>
+      <li><strong>Runs you finish</strong>: the seed, deck, stake, the moves you made, your Jesters and your result. These power the daily run and the leaderboards.</li>
+      <li><strong>Sign-in sessions</strong>: a hashed session token and when it was created and last used.</li>
+      <li><strong>Network address</strong>: when a new guest account is created, the IP address it came from is kept in a counter that limits how many accounts can be made from one network, to stop abuse.</li>
+      <li><strong>Email we send you</strong>: account verification and password-reset messages, and the address they go to.</li>
+    </ul>
+    <p>On your device, the game also keeps your save and settings in the browser’s or app’s local storage so you can play offline.</p>
+  </section>
+
+  <section>
+    <h2>What others can see</h2>
+    <p>Leaderboards show your player name and your scores to other players. Choose a name you are happy to have seen.</p>
+  </section>
+
+  <section>
+    <h2>Who processes it</h2>
+    <p>The game and its server run on Cloudflare (Workers and the D1 database), which handles the requests your device sends. Account emails are sent through an email delivery provider. These services process data only to run Deck of Fools.</p>
+  </section>
+
+  <section>
+    <h2>Deleting your data</h2>
+    <p>In the game, open <strong>Profile → Delete account</strong> and tap twice to confirm. This permanently removes your account, saved game, runs, daily attempts and sessions from our server. To remove what is kept on your device too, delete the app or clear the site’s data in your browser.</p>
+  </section>
+
+  <section>
+    <h2>Children</h2>
+    <p>Deck of Fools is not directed at children under 13, and we do not knowingly collect their personal information.</p>
+  </section>
+
+  <section>
+    <h2>Changes and contact</h2>
+    <p>If this policy changes, we will update this page and its date. Questions or requests: <a href="mailto:CONTACT_EMAIL">CONTACT_EMAIL</a>.</p>
+  </section>
+</main>
+<footer class="muted">
+  <a href="./">Play Deck of Fools</a>
+  <a href="support.html">Support</a>
+</footer>
+</body>
+</html>

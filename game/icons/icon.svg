@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="sky" cx="512" cy="470" r="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d42a48"/>
+      <stop offset="0.45" stop-color="#8e1230"/>
+      <stop offset="1" stop-color="#1e0b3d"/>
+    </radialGradient>
+    <radialGradient id="candle" cx="512" cy="520" r="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2c0" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#fff2c0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="390" x2="0" y2="690" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff2c0"/>
+      <stop offset="0.38" stop-color="#e2aa3e"/>
+      <stop offset="1" stop-color="#7a4c10"/>
+    </linearGradient>
+    <linearGradient id="feather1" x1="0" y1="120" x2="0" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7ff0e4"/>
+      <stop offset="1" stop-color="#0f7a72"/>
+    </linearGradient>
+    <linearGradient id="feather2" x1="0" y1="150" x2="0" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#d8c8a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+  <g stroke="#ffd36a" stroke-opacity="0.13" stroke-width="5">
+    <path d="M-512 0L512 1024M-384 0L640 1024M-256 0L768 1024M-128 0L896 1024M0 0L1024 1024M128 0L1152 1024M256 0L1280 1024M384 0L1408 1024M512 0L1536 1024"/>
+    <path d="M1536 0L512 1024M1408 0L384 1024M1280 0L256 1024M1152 0L128 1024M1024 0L0 1024M896 0L-128 1024M768 0L-256 1024M640 0L-384 1024M512 0L-512 1024"/>
+  </g>
+  <circle cx="512" cy="520" r="420" fill="url(#candle)"/>
+  <!-- Feather plume rising from the mask's right tip -->
+  <path d="M820 500C850 360 900 250 980 150C975 270 930 400 860 515Z" fill="url(#feather1)" stroke="#0a4a45" stroke-width="6"/>
+  <path d="M790 505C790 360 820 250 870 140C895 270 880 400 835 515Z" fill="url(#feather2)" stroke="#8a7a5a" stroke-width="6"/>
+  <path d="M845 510C900 410 960 350 1010 320C990 400 940 470 870 525Z" fill="#e2aa3e" stroke="#7a4c10" stroke-width="6"/>
+  <!-- Ribbons hanging from the tips -->
+  <path d="M168 540C150 640 170 740 210 820C230 760 220 650 205 560Z" fill="#29d3c6" stroke="#0a4a45" stroke-width="6"/>
+  <path d="M856 540C874 640 854 740 814 820C794 760 804 650 819 560Z" fill="#29d3c6" stroke="#0a4a45" stroke-width="6"/>
+  <!-- The gold Colombina mask, eye holes cut out -->
+  <path fill="url(#gold)" fill-rule="evenodd" stroke="#4a2c08" stroke-width="12" stroke-linejoin="round"
+    d="M150 520C190 430 250 395 300 400C390 405 450 450 512 470C574 450 634 405 724 400C774 395 834 430 874 520C850 600 810 665 760 670C680 678 600 640 512 600C424 640 344 678 264 670C214 665 174 600 150 520Z
+       M285 548C305 505 360 492 410 500C445 506 462 530 452 556C440 584 392 596 345 590C300 584 274 572 285 548Z
+       M739 548C719 505 664 492 614 500C579 506 562 530 572 556C584 584 632 596 679 590C724 584 750 572 739 548Z"/>
+  <!-- Filigree on the cheeks and brow -->
+  <g fill="none" stroke="#7a4c10" stroke-width="7" stroke-linecap="round">
+    <path d="M230 600C260 630 300 640 330 625C350 615 345 595 325 597"/>
+    <path d="M794 600C764 630 724 640 694 625C674 615 679 595 699 597"/>
+    <path d="M330 438C370 430 410 440 440 462"/>
+    <path d="M694 438C654 430 614 440 584 462"/>
+  </g>
+  <g fill="none" stroke="#fff2c0" stroke-opacity="0.75" stroke-width="5" stroke-linecap="round">
+    <path d="M205 500C240 440 285 418 330 420"/>
+    <path d="M600 432C640 418 690 410 730 418"/>
+  </g>
+  <!-- Jewel on the brow -->
+  <path d="M512 415L540 452L512 489L484 452Z" fill="#29d3c6" stroke="#0a4a45" stroke-width="6"/>
+  <path d="M505 430L518 444L505 458Z" fill="#ffffff" fill-opacity="0.7"/>
+</svg>

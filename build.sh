@@ -11,4 +11,11 @@ rm -rf build/web && mkdir -p build/web
 # Workers static assets cap each file at 25 MiB; the wasm is ~38 MiB, gzip brings it to ~10 MiB.
 gzip -9 -c build/web/index.wasm > build/web/index.wasm.gz
 rm build/web/index.wasm
+# The privacy and support pages the App Store asks for. They go live once a real
+# contact address replaces the CONTACT_EMAIL placeholder.
+if grep -q CONTACT_EMAIL site/public/*.html; then
+	echo "note: privacy.html and support.html still say CONTACT_EMAIL, so they were not published"
+else
+	cp site/public/*.html build/web/
+fi
 ls -la build/web

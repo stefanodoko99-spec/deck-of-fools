@@ -28,21 +28,24 @@ const DRIVES := { "show": ["show_drive", -1.0], "patron": ["patron_drive", -4.0]
 const VOICES := 8
 
 
+## Five tones per mood, dark to bright, then a contrasting accent. Vivid carnival
+## colours rather than near-black, so the backdrop glows behind the panels.
 const MOODS := {
-	"menu": [Color("100719"), Color("321449"), Color("6e2264"), Color("c0457c"), Color("3aa6ba")],
-	"patron": [Color("170408"), Color("480e18"), Color("8a2027"), Color("d05a34"), Color("e0b456")],
-	"shop": [Color("07140b"), Color("163f24"), Color("2f7436"), Color("80b84e"), Color("5a9ad6")],
+	"menu": [Color("1e0b3d"), Color("4b1a7a"), Color("a1237a"), Color("ff4f81"), Color("29d3c6")],
+	"patron": [Color("2a0610"), Color("6e0f22"), Color("b3192f"), Color("ff6a3a"), Color("ffcc4d")],
+	"shop": [Color("0a2a1c"), Color("13573a"), Color("1f9a5e"), Color("8be05a"), Color("4fb8ff")],
 }
 
+## One palette per town, so each stop on the tour has its own sky.
 const TOWN_MOODS := [
-	[Color("06141f"), Color("0d3442"), Color("17595f"), Color("2f8f84"), Color("d8708f")],
-	[Color("071027"), Color("132a5a"), Color("1f4c8a"), Color("3f7ad8"), Color("f0c860")],
-	[Color("061a17"), Color("0f3b33"), Color("1e6b57"), Color("3fa080"), Color("f08a6a")],
-	[Color("1a0e07"), Color("3d2210"), Color("6e3d1c"), Color("b0703a"), Color("7fb0d0")],
-	[Color("1a0812"), Color("3d1230"), Color("6e2050"), Color("b03a6a"), Color("f0b84a")],
-	[Color("0d1608"), Color("24350f"), Color("466018"), Color("8aa83a"), Color("46c2d8")],
-	[Color("100a1f"), Color("2a1650"), Color("4a2a8a"), Color("8060d0"), Color("f0d860")],
-	[Color("1a0610"), Color("40122a"), Color("701e48"), Color("b04a78"), Color("9ad05a")],
+	[Color("06283a"), Color("0b5a6e"), Color("13909a"), Color("3fd6c0"), Color("ff7a9c")],
+	[Color("0a1a4a"), Color("1a3a8f"), Color("2f63d6"), Color("5fa0ff"), Color("ffd34d")],
+	[Color("072e26"), Color("0e5e4a"), Color("1a9a74"), Color("52d6a0"), Color("ffa07a")],
+	[Color("2e1405"), Color("6e3410"), Color("b8641e"), Color("ffaa4d"), Color("7cc8ff")],
+	[Color("2e0a26"), Color("6e1658"), Color("b3237f"), Color("ff5cb0"), Color("ffc94d")],
+	[Color("14260a"), Color("2f5a12"), Color("5c9a1e"), Color("b5e04a"), Color("3fe0ff")],
+	[Color("1a0f3d"), Color("3f2a8a"), Color("6f4ad6"), Color("a98bff"), Color("fff06a")],
+	[Color("2e0a1a"), Color("6e1a3f"), Color("b33a6e"), Color("ff7aa8"), Color("8bf0b0")],
 ]
 
 const SWIRL_SPEED := 0.12
@@ -86,6 +89,14 @@ var _mood_tween: Tween
 var _flash_tween: Tween
 var _phase := 0.0
 var _kick := 0.0
+## Background reactions to play: see shaders/swirl.gdshader.
+var _clock := 0.0
+var _energy := 0.0
+var _confetti := 0.0
+var _danger := false
+var _pulse := 0.0
+var _gloom := 0.0
+var _gloom_target := 0.0
 
 
 func _ready() -> void:
@@ -149,14 +160,44 @@ func _process(scaled_delta: float) -> void:
 	if _backdrop == null or Settings.reduce_motion:
 		return
 	_kick = move_toward(_kick, 0.0, delta * 1.6)
-	_phase += delta * (SWIRL_SPEED + _kick)
+	_energy = move_toward(_energy, _intensity_target, delta * 0.5)
+	_phase += delta * (SWIRL_SPEED * (1.0 + _energy * 1.6) + _kick)
+	_clock += delta
+	_confetti = move_toward(_confetti, 0.0, delta * 0.35)
+	if _danger:
+		# A double heartbeat, about 70 beats a minute.
+		var beat := fposmod(_clock * 1.15, 1.0)
+		_pulse = maxf(pow(maxf(0.0, sin(beat * TAU)), 12.0), 0.6 * pow(maxf(0.0, sin((beat - 0.18) * TAU)), 12.0))
+	else:
+		_pulse = move_toward(_pulse, 0.0, delta * 2.0)
+	_gloom = move_toward(_gloom, _gloom_target, delta * 0.6)
 	_backdrop.set_shader_parameter("phase", _phase)
+	_backdrop.set_shader_parameter("clock", _clock)
+	_backdrop.set_shader_parameter("energy", _energy)
+	_backdrop.set_shader_parameter("confetti", _confetti)
+	_backdrop.set_shader_parameter("pulse", _pulse)
+	_backdrop.set_shader_parameter("gloom", _gloom)
 
 
 
 
 func intensity(level: float) -> void:
 	_intensity_target = clampf(level, 0.0, 1.0)
+
+
+## Throw confetti across the backdrop: 1.0 for a won show, less for a big hand.
+func celebrate(amount := 1.0) -> void:
+	_confetti = maxf(_confetti, clampf(amount, 0.0, 1.0) * (0.5 if Settings.reduce_motion else 1.0))
+
+
+## The red heartbeat at the edges, while the player is down to their last hand.
+func danger(on: bool) -> void:
+	_danger = on and not Settings.reduce_motion
+
+
+## Drain the backdrop's colour when a run is lost.
+func gloom(on: bool) -> void:
+	_gloom_target = 1.0 if on else 0.0
 
 
 
@@ -238,6 +279,9 @@ func mood(name: String, town := 1) -> void:
 	if key == _mood or not (MOODS.has(name) or name == "show"):
 		return
 	_mood = key
+	if name == "menu" or name == "shop":
+		danger(false)
+		gloom(false)
 	_switch_music(TRACKS.get(name, "theme"))
 	if _mood_tween != null:
 		_mood_tween.kill()

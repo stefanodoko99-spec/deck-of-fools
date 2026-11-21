@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://gtsm3gr0invn"
-path="res://.godot/imported/PixelifySans.ttf-fc5a9a3e822b21581d248cfb12b28920.fontdata"
+uid="uid://doak8l8eawlqe"
+path="res://.godot/imported/AlegreyaSans-ExtraBold.ttf-5df87ec3d74f98aa7c63fde88f7f84e1.fontdata"
 
 [deps]
 
-source_file="res://fonts/PixelifySans.ttf"
-dest_files=["res://.godot/imported/PixelifySans.ttf-fc5a9a3e822b21581d248cfb12b28920.fontdata"]
+source_file="res://fonts/AlegreyaSans-ExtraBold.ttf"
+dest_files=["res://.godot/imported/AlegreyaSans-ExtraBold.ttf-5df87ec3d74f98aa7c63fde88f7f84e1.fontdata"]
 
 [params]
 

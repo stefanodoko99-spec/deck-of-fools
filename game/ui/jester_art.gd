@@ -25,6 +25,10 @@ var hair: Color
 var bottom: float
 
 
+var defer_badge := false
+var badge_effect := ""
+
+
 func _init(target: CanvasItem) -> void:
 	canvas = target
 
@@ -35,8 +39,24 @@ static func has_design(def_id: String) -> bool:
 
 
 func draw(window: Rect2, pane: PackedVector2Array, def_id: String) -> void:
-	var d: Array = JesterDesigns.DESIGNS[def_id]
-	var n := absi(def_id.hash())
+	draw_design(window, pane, JesterDesigns.DESIGNS[def_id], absi(def_id.hash()))
+
+
+## Court cards: the King is the Doge, the Queen a masked noblewoman, the Jack
+## Arlecchino, dressed in their suit's colour against a matching Venetian sky.
+static func court_design(rank: int, suit: int) -> Array:
+	var red := suit == PlayingCard.Suit.HEARTS or suit == PlayingCard.Suit.DIAMONDS
+	var robe := "crimson" if red else "navy"
+	var sky := "wine" if red else "sea"
+	match rank:
+		PlayingCard.KING:
+			return [sky, "rays", "doge", "none", "smile", "robe", robe, "gold", "goblet", "", "beard"]
+		PlayingCard.QUEEN:
+			return [sky, "curtain", "tiara", "half", "smirk", "gown", robe, "gold", "fan", "", ""]
+	return [sky, "lattice", "cap2", "domino", "grin", "diamonds", robe, "gold", "marotte", "", ""]
+
+
+func draw_design(window: Rect2, pane: PackedVector2Array, d: Array, n: int) -> void:
 	w = window
 	s = minf(window.size.x, window.size.y) * 0.46
 	h = window.get_center() + Vector2(0, window.size.y * 0.03)
@@ -45,8 +65,11 @@ func draw(window: Rect2, pane: PackedVector2Array, def_id: String) -> void:
 	b = JesterDesigns.COLOURS[d[7]]
 	hair = HAIRS[n % HAIRS.size()]
 	var back: Color = JesterDesigns.BACKDROPS[d[0]]
-	_gradient(pane, back.lightened(0.18), back.darkened(0.3))
-	_pattern(pane, str(d[1]), back)
+	# A brighter, more saturated sky than the old flat backdrops, lit by a candle behind the head.
+	var sky := Color.from_hsv(back.h, minf(1.0, back.s * 1.15), minf(1.0, back.v * 1.55 + 0.08))
+	_gradient(pane, sky.lightened(0.22), sky.darkened(0.35))
+	Paint.glow(canvas, h + Vector2(0, -s * 0.25), s * 1.25, Color(Paint.GOLD_HI, 0.55))
+	_pattern(pane, str(d[1]), sky)
 	var mask := str(d[3])
 	var skin: Color = SKINS[(n / 7) % SKINS.size()]
 	if mask == "white":
@@ -54,6 +77,10 @@ func draw(window: Rect2, pane: PackedVector2Array, def_id: String) -> void:
 	elif mask == "wood":
 		skin = Color("c89060")
 	var extras := str(d[10]).split(" ", false)
+	# A soft shadow under the bust grounds the figure.
+	canvas.draw_set_transform(h + Vector2(0, s * bottom * 0.98), 0.0, Vector2(1.0, 0.28))
+	Paint.glow(canvas, Vector2.ZERO, s * 1.1, Color(0, 0, 0, 0.45), 5)
+	canvas.draw_set_transform(Vector2.ZERO)
 	_hat_back(str(d[2]))
 	_costume(str(d[5]))
 	_head(skin)
@@ -64,7 +91,17 @@ func draw(window: Rect2, pane: PackedVector2Array, def_id: String) -> void:
 	_extras(extras, covered, mask != "none" and mask != "white" and mask != "wood")
 	_hat(str(d[2]))
 	_prop(str(d[8]))
-	_badge(str(d[9]))
+	Paint.vignette(canvas, w, Color(0.05, 0.02, 0.06, 0.3), minf(w.size.x, w.size.y) * 0.22)
+	badge_effect = str(d[9])
+	if not defer_badge:
+		draw_badge()
+
+
+## The effect badge sits in the window's top-left corner. Cards draw it after their
+## frame (`defer_badge`) so the arch's corner does not cover it.
+func draw_badge() -> void:
+	if badge_effect != "":
+		_badge(badge_effect)
 
 
 
@@ -86,10 +123,8 @@ func _shape(coords: Array, colour: Color) -> void:
 
 
 func _poly(points: PackedVector2Array, colour: Color) -> void:
-	canvas.draw_colored_polygon(points, colour)
-	var closed := points.duplicate()
-	closed.append(points[0])
-	canvas.draw_polyline(closed, colour, 0.6, true)
+	# Painted: lit from the top left with a fine sepia ink line.
+	Paint.shape(canvas, points, colour, maxf(0.45, s * 0.028))
 
 
 func _dot(at: Vector2, radius: float, colour: Color) -> void:
@@ -146,7 +181,7 @@ func _star(at: Vector2, radius: float, colour: Color) -> void:
 
 
 func _pattern(pane: PackedVector2Array, kind: String, back: Color) -> void:
-	var light := Color(back.lightened(0.45), 0.28)
+	var light := Color(back.lightened(0.45).lerp(Paint.GOLD_HI, 0.4), 0.26)
 	var c := w.get_center()
 	var far := w.size.length()
 	var shapes: Array[PackedVector2Array] = []

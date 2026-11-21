@@ -309,6 +309,8 @@ func refresh() -> void:
 	_drop_stale_selection()
 	Feel.mood(_mood(), run.town)
 	Feel.intensity(_heat())
+	Feel.danger(run.phase == RunState.Phase.IN_SHOW and run.hands_left <= 1 and run.show_score < run.show_target)
+	Feel.gloom(run.phase == RunState.Phase.LOST)
 	_update_side()
 	_build_top()
 	_build_middle()
@@ -1309,6 +1311,7 @@ func _on_play() -> void:
 		Feel.play("win")
 		Feel.play("applause")
 		Feel.intensity(1.0)
+		Feel.celebrate(1.0)
 		Feel.buzz(40)
 		Feel.shake(4.0)
 		Feel.kick(2.0)
@@ -1458,6 +1461,10 @@ func _slam(total: float, won: bool) -> void:
 	Feel.shake(clampf(log(total + 10.0) / log(10.0), 1.5, 6.0))
 	Feel.kick(1.2)
 	Feel.flash(UiTheme.GOLD if won else UiTheme.MULT, clampf(0.25 + share * 0.5, 0.25, 0.9))
+	if share >= 1.0:
+		Feel.celebrate(0.7)
+	elif share >= 0.5:
+		Feel.celebrate(0.3)
 	Feel.burst(l.get_global_rect().get_center(), UiTheme.GOLD if won else UiTheme.MULT, 30)
 	if Settings.reduce_motion:
 		await _wait(0.6)

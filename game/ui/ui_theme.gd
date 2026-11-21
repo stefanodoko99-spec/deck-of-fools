@@ -13,14 +13,19 @@ const STAGE := Vector2(640, 360)
 const GOLD := Color("f0b84a")
 const POINTS := Color("3f8ed8")
 const MULT := Color("e0503c")
-const TEXT := Color("f3ead8")
-const MUTED := Color("a99bbd")
-const CARD := Color("f4ead6")
-const RED_SUIT := Color("c8323c")
-const BLACK_SUIT := Color("2a2433")
+const TEXT := Color("fbf3e4")
+const MUTED := Color("cbbfe0")
+const CARD := Color("f6ecd4")
+const RED_SUIT := Color("b5122e")
+const BLACK_SUIT := Color("1d2340")
 const GOOD := Color("6cc46a")
 
+## Body text: Alegreya Sans Medium, a Renaissance humanist sans that stays clear at small sizes.
 static var font: Font
+## Buttons and emphasis: Alegreya Sans ExtraBold.
+static var bold: Font
+## Titles, card names and card numbers: Cinzel Bold, Roman inscriptional capitals.
+static var display: Font
 
 
 static var sheet_host: Control
@@ -41,17 +46,25 @@ static func sheet_open() -> bool:
 	return false
 
 
-static func build() -> Theme:
-	var file: FontFile = load("res://fonts/PixelifySans.ttf")
-
-
+static func _font(path: String) -> FontFile:
+	var file: FontFile = load(path)
 	file.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
-	file.hinting = TextServer.HINTING_NONE
-	file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
-	font = file
+	file.hinting = TextServer.HINTING_LIGHT
+	file.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
+	return file
+
+
+static func build() -> Theme:
+	font = _font("res://fonts/AlegreyaSans-Medium.ttf")
+	bold = _font("res://fonts/AlegreyaSans-ExtraBold.ttf")
+	var cinzel := FontVariation.new()
+	cinzel.base_font = _font("res://fonts/Cinzel.ttf")
+	cinzel.variation_opentype = { TextServerManager.get_primary_interface().name_to_tag("wght"): 700 }
+	display = cinzel
 	var t := Theme.new()
-	t.default_font = file
-	t.default_font_size = 10
+	t.default_font = font
+	t.default_font_size = px(10)
+	t.set_font("font", "Button", bold)
 	_style_button(t, null, PANEL_LIGHT)
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	t.set_color("font_color", "Button", TEXT)
@@ -146,7 +159,10 @@ static func _style_button(t: Theme, b: Button, colour: Color) -> void:
 
 
 static func px(size: int) -> int:
-	return maxi(7, roundi(size * Settings.text_scale()))
+	# Layout sizes were set for an 8-10 px pixel font. Body text now reads about a fifth
+	# larger, with nothing under 10 px; big titles stay close to their old size.
+	var grown := size * 1.2 if size <= 14 else size * 1.05
+	return maxi(10, roundi(grown * Settings.text_scale()))
 
 
 static func label(text: String, size := 10, color := TEXT) -> Label:
@@ -171,6 +187,7 @@ static func segmented(names: Array, chosen: int, pick: Callable, size := 10) -> 
 
 static func title(text: String, size := 16, color := GOLD) -> Label:
 	var l := label(text, size, color)
+	l.add_theme_font_override("font", display)
 	l.add_theme_constant_override("outline_size", maxi(4, size / 5))
 	l.add_theme_color_override("font_outline_color", OUTLINE)
 	l.add_theme_constant_override("shadow_offset_x", 0)

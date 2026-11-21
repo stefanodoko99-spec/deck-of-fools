@@ -24,7 +24,9 @@ static var sfx_volume := 0.8
 static var music_volume := 0.7
 static var quality := 2
 static var fps := 60
-static var crt := 2
+static var crt := 0
+## Bumped when the default look changes, so old saves pick up the new defaults once.
+const LOOK_VERSION := 2
 static var speed := 1
 static var size := 1
 static var vibration_level := 1
@@ -52,6 +54,9 @@ static func load_saved() -> void:
 			quality = clampi(int(data.get("quality", quality)), 0, 2)
 			fps = int(data.get("fps", fps)) if FPS_CHOICES.has(int(data.get("fps", fps))) else 60
 			crt = clampi(int(data.get("crt", crt)), 0, 2)
+			if int(data.get("look", 1)) < LOOK_VERSION:
+				# The painted Venetian look is meant to be seen without scanlines; players can turn them back on.
+				crt = 0
 			speed = int(data.get("speed", speed)) if SPEEDS.has(int(data.get("speed", speed))) else 1
 			size = clampi(int(data.get("size", size)), 0, 2)
 			var old_vibration: Variant = data.get("vibration")
@@ -70,7 +75,7 @@ static func save() -> void:
 			"sfx_volume": sfx_volume, "music_volume": music_volume, "quality": quality, "fps": fps,
 			"crt": crt, "speed": speed, "size": size, "vibration_level": vibration_level,
 			"card_back": card_back, "seen_help": seen_help, "asked_account": asked_account,
-			"tutorial_step": tutorial_step,
+			"tutorial_step": tutorial_step, "look": LOOK_VERSION,
 		}))
 
 

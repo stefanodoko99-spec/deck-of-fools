@@ -60,15 +60,14 @@ func _build() -> void:
 	Feel.mood("menu")
 	var stage := UiTheme.stage(self)
 
+	# A large title over the left column, with the account chip at the top right.
 	var title := UiTheme.title("DECK OF FOOLS", 30, UiTheme.GOLD)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.position = Vector2(0, 4)
-	title.size = Vector2(640, 38)
+	title.position = Vector2(LEFT.x, 0)
+	title.size = Vector2(LEFT_W, 38)
 	stage.add_child(title)
 	var sub := UiTheme.title("A troupe of Jesters against the house", 10, UiTheme.TEXT)
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.position = Vector2(0, 38)
-	sub.size = Vector2(640, 14)
+	sub.position = Vector2(LEFT.x + 2, 35)
+	sub.size = Vector2(LEFT_W, 16)
 	stage.add_child(sub)
 
 	_build_setup(stage)
