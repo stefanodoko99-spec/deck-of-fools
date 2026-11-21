@@ -7,13 +7,14 @@ This file lists what is still needed for a native App Store release, in order. I
 ## 1. Accounts and tools (you)
 
 - [ ] Join the **Apple Developer Program** ($99 a year) with the Apple ID that will own the app.
-- [ ] Install **Xcode** from the Mac App Store. This Mac only has the Command Line Tools, and Godot's iOS export needs full Xcode to build and sign.
-- [ ] Install Godot's **iOS export template**. Only the web templates are installed now (in `~/Library/Application Support/Godot/export_templates/4.7.2.stable/`). `ios.zip` comes from the same official 4.7.2 template bundle.
+- ✅ **Xcode** 27.2 is installed and its license accepted (21 November 2026).
+- ✅ Godot's **iOS export template** (`ios.zip`, from the official 4.7.2 bundle) is installed next to the web templates in `~/Library/Application Support/Godot/export_templates/4.7.2.stable/`.
+- [ ] Optional: an **iOS Simulator runtime** (Xcode → Settings → Components, about 8 GB) to try builds without a phone.
 
 ## 2. Project settings
 
-- [ ] Choose the **bundle ID**, for example `com.yourname.deckoffools`. It can never change once the app is in App Store Connect.
-- [ ] Fill `application/bundle_identifier` and `application/app_store_team_id` in the **iOS** preset (`game/export_presets.cfg`, or Project → Export in the editor).
+- ✅ **Bundle ID** `al.oddformstudio.deckoffools` is set in the iOS preset. It can still change until the app is registered in App Store Connect, never after.
+- [ ] Fill `application/app_store_team_id` in the iOS preset once you have a team (or pick the team in Xcode).
 - ✅ App icon: `game/icons/ios-1024.png`, 1024×1024 with no transparency, as Apple requires. Its source is `game/icons/icon.svg`.
 - ✅ Landscape only, iPhone and iPad (`application/targeted_device_family=2`).
 - [ ] Launch screen: Godot generates one from the boot splash colour (`#1b1026`); check it in the first TestFlight build.

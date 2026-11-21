@@ -69,7 +69,7 @@ func _build() -> void:
 				natives.add_child(UiTheme.button("Continue with " + provider.capitalize(), _native.bind(provider), 11, UiTheme.BLACK_SUIT if provider == "apple" else UiTheme.POINTS))
 		if natives.get_child_count() > 0:
 			body.add_child(natives)
-		else:
+		elif OS.has_feature("web"):
 			body.add_child(words("Sign in with Apple and Google come with the phone apps.", 8, UiTheme.MUTED))
 
 

@@ -27,6 +27,15 @@ cd site && npx wrangler deploy
 
 `index.wasm` is about 38 MiB, over the 25 MiB limit for a Workers static asset, so `build.sh` ships it as `index.wasm.gz` and `site/worker.js` serves it with `Content-Encoding: gzip`.
 
+## Build the iPhone app
+
+```sh
+./ios.sh
+open build/ios/DeckOfFools.xcodeproj
+```
+
+`ios.sh` exports the Xcode project (needs Godot's iOS template). In Xcode, choose your team under Signing & Capabilities, connect your iPhone and press Run. See [docs/APP_STORE.md](docs/APP_STORE.md) for the App Store steps.
+
 ## Deploy the API
 
 ```sh

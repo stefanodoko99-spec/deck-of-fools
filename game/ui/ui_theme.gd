@@ -365,7 +365,31 @@ static func stage(parent: Control) -> Control:
 	s.offset_top = -STAGE.y / 2.0
 	s.offset_bottom = STAGE.y / 2.0
 	parent.add_child(s)
+	if OS.has_feature("mobile"):
+		_fit_safe_area(s)
 	return s
+
+
+## In the phone apps, keep the 640x360 stage inside the screen's safe area (clear
+## of the notch, the Dynamic Island and the home indicator), scaled down a little
+## if needed. The backdrop still fills the whole screen. Browsers handle this
+## themselves, so the web build never needs it.
+static func _fit_safe_area(s: Control) -> void:
+	var window := Vector2(DisplayServer.window_get_size())
+	var safe := Rect2(DisplayServer.get_display_safe_area())
+	var view := s.get_viewport_rect().size
+	if window.x <= 0.0 or safe.size.x <= 0.0:
+		return
+	var to_view := view.x / window.x
+	var area := Rect2(safe.position * to_view, safe.size * to_view)
+	var k := minf(1.0, minf(area.size.x / STAGE.x, area.size.y / STAGE.y))
+	s.pivot_offset = STAGE / 2.0
+	s.scale = Vector2(k, k)
+	var shift := area.get_center() - view / 2.0
+	s.offset_left += shift.x
+	s.offset_right += shift.x
+	s.offset_top += shift.y
+	s.offset_bottom += shift.y
 
 
 
