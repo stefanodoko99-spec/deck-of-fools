@@ -9,8 +9,8 @@ Done so far (22 November 2026): `z_arlecchino`, `z_zanni`. 148 to go.
 ## Style
 
 Stylised collectible-card illustration: exaggerated, dynamic poses, inked outlines,
-painted texture, bold saturated colour, a simple plum backdrop with a faint gold
-lattice. Not photographic. The playing cards stay plain and white; the Jesters are
+painted texture, bold saturated colour, a simple backdrop in the Jester's own colour
+with a faint gold pattern. Not photographic. The playing cards stay plain and white; the Jesters are
 the loud part of the table.
 
 ## Making one in Adobe Firefly
@@ -79,8 +79,8 @@ download), and runs `check.sh`. Then look at it in the gallery: `./preview.sh` a
 
 Both files so far came from screen captures of the Firefly results (634×816, cropped by
 3 px, `./art.sh <id> <png> 3`), because the download from Firefly was blocked in the
-browser that made them. If
-you download the original 896×1152 file, run `art.sh` again with it.
+browser that made them. If you download the original 896×1152 file, run `art.sh`
+again with it.
 
 ## Rights
 
