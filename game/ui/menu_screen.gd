@@ -280,10 +280,14 @@ func _build_account_chip(stage: Control) -> void:
 	var name_text := str(Online.user.get("name", "Offline")) if Online.signed_in() else "Offline"
 	var label := name_text + (" - save your progress" if Online.signed_in() and Online.is_guest() else "")
 	var chip := UiTheme.button(label, func() -> void: _open(ProfileSheet.new()), 10, UiTheme.PANEL_DARK)
-	chip.position = Vector2(RIGHT_X + RIGHT_W - 190, 8)
-	chip.size = Vector2(190, 20)
 	chip.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	stage.add_child(chip)
+	# Size the chip only once it is in the tree. Before that it measures its text with the
+	# default 16 px theme font, grows to fit, and never shrinks back, so a guest's
+	# "save your progress" label ran off the right edge. Keep the right edge fixed and
+	# let a longer label (or a larger text size) grow to the left.
+	chip.size = Vector2(190, 20)
+	chip.position = Vector2(RIGHT_X + RIGHT_W - chip.size.x, 8)
 
 
 func _open(sheet: Control) -> void:
