@@ -23,6 +23,11 @@ const RARITY_GRADIENTS := [
 	[Color("4f8cff"), Color("5b4bdb")], [Color("22c493"), Color("0f8f8a")],
 	[Color("ff5d8f"), Color("d6204f")], [Color("ffb547"), Color("f0642a")],
 ]
+## Metallic frames by rarity: steel, emerald, gold; Legendary is holographic.
+const FRAME_METALS := [
+	[Color("e9eef5"), Color("8e9bb0"), Color("4a5568")], [Color("c9f5e0"), Color("2fae7a"), Color("0f5a40")],
+	[Color("fff1c2"), Color("e0a83a"), Color("8a5a14")], [Color("ffe6ff"), Color("b48cff"), Color("4a2a8a")],
+]
 const KIND_GRADIENTS := {
 	"tarocchi": [Color("a26bff"), Color("6a2fd1")], "sign": [Color("5b7cff"), Color("2f3fb8")],
 	"omen": [Color("2fd3c0"), Color("118a8f")], "pack": [Color("ff9a4a"), Color("e0562a")],
@@ -578,9 +583,9 @@ func _draw_playing(r: Rect2) -> void:
 			_draw_face(r, k, colour)
 		else:
 			draw_suit(self, r.get_center() + Vector2(0, 1.5 * k), (19.0 if card.rank == 14 else 13.5) * k, card.suit, colour)
-		_draw_index(k, colour, court)
+		_draw_index(k, colour)
 		draw_set_transform(r.size, PI)
-		_draw_index(k, colour, court)
+		_draw_index(k, colour)
 		draw_set_transform(Vector2.ZERO)
 	else:
 		draw_string(UiTheme.display, Vector2(4, r.size.y / 2.0 + 4 * k), "MARBLE", HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 8, int(round(10 * k)), Color("4a4e5c"))
@@ -595,30 +600,43 @@ func _draw_playing(r: Rect2) -> void:
 		var at := Vector2(r.size.x - 9 * k, 9 * k)
 		_dot(at, 4.4 * k, Color.WHITE)
 		_dot(at, 3.4 * k, SEAL_COLOURS[card.seal])
-	_gloss(r)
 
 
-func _draw_index(k: float, colour: Color, chip := false) -> void:
+func _draw_index(k: float, colour: Color) -> void:
 	var rank_text := str(RANKS.get(card.rank, card.rank))
-	var font_size := int(round((16.0 if rank_text.length() > 1 else 19.0) * k))
+	var font_size := int(round((16.0 if rank_text.length() > 1 else 18.0) * k))
 	var width := UiTheme.display.get_string_size(rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
-	var left := 4.5 * k
-	if chip:
-		# On court cards the corner sits on a white tag over the portrait.
-		var tag := Rect2(Vector2(2.2, 2.2) * k, Vector2(maxf(width + 5.0 * k, 15.0 * k), 30.0 * k))
-		draw_colored_polygon(Paint.round_rect(tag, 4.0 * k), Color(1, 1, 1, 0.94))
-		left = tag.position.x + (tag.size.x - width) / 2.0
-	draw_string(UiTheme.display, Vector2(left, 19.5 * k), rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, colour)
-	draw_suit(self, Vector2(left + width / 2.0, 26.0 * k), 4.3 * k, card.suit, colour)
+	var left := 5.0 * k
+	draw_string(UiTheme.display, Vector2(left, 18.5 * k), rank_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, colour)
+	draw_suit(self, Vector2(left + width / 2.0, 25.0 * k), 4.0 * k, card.suit, colour)
 
 
 func _draw_face(r: Rect2, k: float, colour: Color) -> void:
-	# A full-colour panel with the court figure: the King is the Doge, the Queen a
-	# masked noblewoman, the Jack Arlecchino.
-	var panel := r.grow(-3.0 * k)
-	var pane := Paint.round_rect(panel, 4.5 * k)
-	JesterArt.new(self).draw_design(panel, pane, JesterArt.court_design(card.rank, card.suit), card.rank * 31 + card.suit)
-	_cover_outside(panel, pane, func(y: float) -> Color: return Color.WHITE.lerp(Color.WHITE.darkened(0.07), y / r.size.y))
+	# Minimal court cards: a large letter in the suit colour over a soft tinted disc,
+	# with a fine line emblem (crown, tiara, jester's cap) above it.
+	var c := r.get_center() + Vector2(0, 1.0 * k)
+	draw_circle(c, 19.0 * k, Color(colour, 0.09), true, -1.0, true)
+	_court_emblem(card.rank, c + Vector2(0, -12.5 * k), 7.5 * k, colour)
+	var letter := str(RANKS.get(card.rank, ""))
+	var font_size := int(round(26.0 * k))
+	var width := UiTheme.display.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	draw_string(UiTheme.display, c + Vector2(-width / 2.0, 12.5 * k), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, colour)
+
+
+func _court_emblem(rank: int, at: Vector2, s: float, colour: Color) -> void:
+	var w := maxf(0.9, s * 0.2)
+	var line := func(points: PackedVector2Array) -> void: draw_polyline(points, colour, w, true)
+	match rank:
+		PlayingCard.KING:
+			line.call(PackedVector2Array([at + Vector2(-s, s * 0.45), at + Vector2(-s, -s * 0.35), at + Vector2(-s * 0.5, s * 0.1), at + Vector2(0, -s * 0.6), at + Vector2(s * 0.5, s * 0.1), at + Vector2(s, -s * 0.35), at + Vector2(s, s * 0.45), at + Vector2(-s, s * 0.45)]))
+		PlayingCard.QUEEN:
+			draw_arc(at + Vector2(0, s * 0.6), s, PI * 1.15, PI * 1.85, 16, colour, w, true)
+			for x in [-0.55, 0.0, 0.55]:
+				draw_circle(at + Vector2(x * s, -s * 0.15 - (0.25 if x == 0.0 else 0.0) * s), w * 1.3, colour, true, -1.0, true)
+		_:
+			line.call(PackedVector2Array([at + Vector2(-s, s * 0.45), at + Vector2(-s * 0.85, -s * 0.5), at + Vector2(-s * 0.15, s * 0.15), at + Vector2(0, -s * 0.15), at + Vector2(s * 0.15, s * 0.15), at + Vector2(s * 0.85, -s * 0.5), at + Vector2(s, s * 0.45), at + Vector2(-s, s * 0.45)]))
+			draw_circle(at + Vector2(-s * 0.85, -s * 0.5), w * 1.4, colour, true, -1.0, true)
+			draw_circle(at + Vector2(s * 0.85, -s * 0.5), w * 1.4, colour, true, -1.0, true)
 
 
 func _draw_ace(r: Rect2, k: float, colour: Color) -> void:
@@ -647,33 +665,92 @@ static func _area(points: PackedVector2Array) -> float:
 
 
 func _draw_named(r: Rect2) -> void:
+	# A premium collectible card: art filling the card inside a thick metallic frame,
+	# the name on a dark plate at the bottom, a gold cost coin top left and the
+	# effect badge top right. Art comes from art/jesters/<id>.webp when it exists,
+	# otherwise the figure is drawn in code.
 	var def := ContentDB.get_def(def_id)
 	var grad: Array = KIND_GRADIENTS.get(kind, KIND_GRADIENTS["show"])
 	var rarity := 0
 	if kind == "zanni" and def != null:
 		rarity = clampi(def.rarity, 0, 3)
 		grad = RARITY_GRADIENTS[rarity]
+	var metal: Array = FRAME_METALS[rarity if kind == "zanni" else 0]
 	var k := r.size.x / 60.0
-	var body := Paint.round_rect(r, 6.0 * k)
-	_diagonal(body, grad[0], grad[1], r)
-	var window := Rect2(Vector2(4.0, 4.0) * k, Vector2(r.size.x - 8.0 * k, r.size.y * 0.63))
-	var pane := Paint.round_rect(window, 5.0 * k)
+	var body := Paint.round_rect(r, 7.0 * k)
+	# Frame: dark rim, metal band (light at the top, deep at the bottom), bevel line.
+	var colours := PackedColorArray()
+	for p in body:
+		var t := p.y / r.size.y
+		colours.append((metal[0] as Color).lerp(metal[1], t / 0.45) if t < 0.45 else (metal[1] as Color).lerp(metal[2], (t - 0.45) / 0.55))
+	draw_polygon(body, colours)
+	if rarity == 3:
+		var holo := PackedColorArray()
+		var hues := [Color("ff8fd0"), Color("7fffd4"), Color("f0d060"), Color("8fb0ff")]
+		for i in body.size():
+			holo.append(Color(hues[(i / 3) % hues.size()], 0.35))
+		draw_polygon(body, holo)
+	_outline(body, Color(0, 0, 0, 0.55), 1.0)
+	var window := r.grow(-3.4 * k)
+	var pane := Paint.round_rect(window, 4.6 * k)
 	var seed_value := absi(def_id.hash())
 	var art: JesterArt = null
-	if kind == "zanni" and JesterArt.has_design(def_id):
+	var art_path := "res://art/jesters/%s.webp" % def_id
+	if kind == "zanni" and ResourceLoader.exists(art_path):
+		_draw_art(load(art_path), window, pane)
+	elif kind == "zanni" and JesterArt.has_design(def_id):
 		art = JesterArt.new(self)
 		art.defer_badge = true
 		art.draw(window, pane, def_id)
 	else:
+		_diagonal(pane, grad[0], grad[1], r)
 		_draw_picture(window, pane, grad[1], seed_value)
-	_cover_outside(window, pane, func(y: float) -> Color: return (grad[0] as Color).lerp(grad[1], clampf(y / r.size.y * 0.6, 0.0, 1.0)))
-	_draw_frame_marks(r, window, pane, grad[1], rarity, kind == "zanni" and def != null)
-	_draw_ribbon(r, window.end.y + 2.0 * k, grad[1])
+	_cover_outside(window, pane, func(y: float) -> Color: return (metal[1] as Color).lerp(metal[2], clampf(y / r.size.y, 0.0, 1.0)))
+	# Bevel: a light line just inside the frame.
+	_outline(pane, Color(1, 1, 1, 0.55), maxf(0.5, 0.6 * k))
+	_draw_ribbon(r, window.end.y - 19.0 * k, grad[1])
+	if def != null and def.cost > 0 and kind == "zanni":
+		_cost_coin(Vector2(window.position.x + 6.0 * k, window.position.y + 6.0 * k), 5.6 * k, def.cost, k)
 	if art != null:
+		art.badge_offset = Vector2(window.size.x - 6.0 * k, 6.0 * k)
 		art.draw_badge()
+	if kind == "zanni" and def != null:
+		for i in rarity + 1:
+			Paint.lit(self, Paint.diamond(Vector2(r.size.x / 2.0 + (i - rarity / 2.0) * 5.2 * k, r.size.y - 1.7 * k), 1.6 * k, 1.6 * k), Color.WHITE)
 	if sticker != "":
-		draw_string(UiTheme.bold, Vector2(7, 13) * k, sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(10 * k)), Color.WHITE)
+		draw_string(UiTheme.bold, Vector2(7, 22) * k, sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(9 * k)), Color.WHITE)
 	_gloss(r)
+
+
+## Draw a texture clipped to a polygon (the rounded art window), filling `window`.
+func _draw_art(tex: Texture2D, window: Rect2, pane: PackedVector2Array) -> void:
+	var uvs := PackedVector2Array()
+	var tex_size := tex.get_size()
+	# Cover the window, cropping the art's sides or top/bottom as needed.
+	var scale := maxf(window.size.x / tex_size.x, window.size.y / tex_size.y)
+	var shown := window.size / scale
+	var origin := (tex_size - shown) / 2.0
+	origin.y = minf(origin.y, (tex_size.y - shown.y) * 0.25)
+	for p in pane:
+		var local := (p - window.position) / window.size
+		uvs.append((origin + local * shown) / tex_size)
+	draw_polygon(pane, PackedColorArray([Color.WHITE]), uvs, tex)
+
+
+func _cost_coin(at: Vector2, radius: float, cost: int, k: float) -> void:
+	draw_circle(at + Vector2(0, 0.6 * k), radius + 0.8 * k, Color(0, 0, 0, 0.45), true, -1.0, true)
+	Paint.gold(self, _circle_points(at, radius), maxf(0.5, 0.5 * k))
+	var text := str(cost)
+	var font_size := int(round(7.5 * k))
+	var width := UiTheme.display.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	draw_string(UiTheme.display, at + Vector2(-width / 2.0, font_size * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color("4a2c08"))
+
+
+static func _circle_points(at: Vector2, radius: float) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in 24:
+		points.append(at + Vector2(cos(i * TAU / 24.0), sin(i * TAU / 24.0)) * radius)
+	return points
 
 
 func _draw_picture(window: Rect2, pane: PackedVector2Array, colour: Color, seed_value: int) -> void:
@@ -741,22 +818,30 @@ func _draw_frame_marks(r: Rect2, window: Rect2, pane: PackedVector2Array, colour
 
 
 func _draw_ribbon(r: Rect2, top: float, colour: Color) -> void:
-	# The name in white bold type straight on the card colour.
+	# The name on a dark plate across the bottom of the art.
 	var title := UiTheme.name_of(def_id) if def_id != "" else ""
 	var k := r.size.x / 60.0
-	var font_size := int(round(10.0 * k))
-	var fit := r.size.x - 12.0 * k
+	var window := r.grow(-3.4 * k)
+	var plate := Rect2(Vector2(window.position.x, top), Vector2(window.size.x, window.end.y - top))
+	var shade := PackedVector2Array([plate.position, Vector2(plate.end.x, plate.position.y), plate.end, Vector2(plate.position.x, plate.end.y)])
+	var pieces := Geometry2D.intersect_polygons(shade, Paint.round_rect(window, 4.6 * k))
+	for piece in pieces:
+		var cols := PackedColorArray()
+		for p in piece:
+			cols.append(Color(0.04, 0.02, 0.08, lerpf(0.15, 0.92, clampf((p.y - plate.position.y) / maxf(1.0, plate.size.y * 0.55), 0.0, 1.0))))
+		draw_polygon(piece, cols)
+	var font_size := int(round(9.0 * k))
+	var fit := window.size.x - 6.0 * k
 	var lines := _wrap(title, fit, font_size)
 	while font_size > 5 and (lines.size() > 2 or _widest(lines, font_size) > fit):
 		font_size -= 1
 		lines = _wrap(title, fit, font_size)
 	lines = lines.slice(0, 2)
-	var line_h := font_size + 1.0
-	var room := r.size.y - 7.0 * k - top
-	var y := top + (room - lines.size() * line_h) / 2.0 + line_h * 0.82
+	var line_h := font_size + 0.5
+	var y := plate.end.y - 3.0 * k - (lines.size() - 1) * line_h
 	for line in lines:
-		draw_string(UiTheme.bold, Vector2(3 * k, y + 0.7), line, HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 6 * k, font_size, Color(0, 0, 0, 0.22))
-		draw_string(UiTheme.bold, Vector2(3 * k, y), line, HORIZONTAL_ALIGNMENT_CENTER, r.size.x - 6 * k, font_size, Color.WHITE)
+		draw_string_outline(UiTheme.display, Vector2(window.position.x, y), line, HORIZONTAL_ALIGNMENT_CENTER, window.size.x, font_size, maxi(2, int(2.0 * k)), Color(0, 0, 0, 0.6))
+		draw_string(UiTheme.display, Vector2(window.position.x, y), line, HORIZONTAL_ALIGNMENT_CENTER, window.size.x, font_size, Color.WHITE)
 		y += line_h
 
 
@@ -1045,7 +1130,7 @@ func _wrap(text: String, width: float, font_size: int) -> Array:
 	var current := ""
 	for word in text.split(" "):
 		var attempt := word if current == "" else current + " " + word
-		if UiTheme.bold.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width and current != "":
+		if UiTheme.display.get_string_size(attempt, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > width and current != "":
 			lines.append(current)
 			current = word
 		else:

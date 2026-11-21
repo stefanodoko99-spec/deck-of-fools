@@ -27,6 +27,9 @@ var bottom: float
 
 var defer_badge := false
 var badge_effect := ""
+## Where the effect badge sits, from the window's top-left corner; cards move it
+## to the top right to make room for their cost coin.
+var badge_offset := Vector2(6.0, 6.0)
 
 
 func _init(target: CanvasItem) -> void:
@@ -859,7 +862,7 @@ func _prop(kind: String) -> void:
 
 
 func _badge(effect: String) -> void:
-	var at := w.position + Vector2(6.0, 6.0)
+	var at := w.position + badge_offset
 	var r := 4.6
 	if effect == "pm":
 		var left := PackedVector2Array([at])

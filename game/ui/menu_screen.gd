@@ -22,6 +22,14 @@ var stake := 1
 var challenge_ids: Array = []
 var challenge_index := 0
 var mode := "deck"
+## Which game mode a new run uses: the ranked 8-town tour, a 3-town quick run or a boss rush.
+var run_mode := "tour"
+const MODES := ["tour", "quick", "bosses"]
+const MODE_WORDS := {
+	"tour": "8 towns  ·  ranked  ·  unlocks decks and stakes",
+	"quick": "3 towns  ·  about 15 minutes  ·  just for fun",
+	"bosses": "Only Patrons, a shop between  ·  just for fun",
+}
 
 var daily_info: Dictionary = {}
 
@@ -95,10 +103,15 @@ func _build_setup(stage: Control) -> void:
 
 	var locked := false
 	if mode == "deck":
+		var modes := UiTheme.segmented(["Tour", "Quick", "Boss rush"], MODES.find(run_mode), func(i: int) -> void:
+			Feel.play("select")
+			run_mode = MODES[i]
+			_build(), 9)
+		col.add_child(modes)
+		col.add_child(_words(MODE_WORDS[run_mode], 8, UiTheme.GOLD.lightened(0.25)))
 		var id: String = deck_ids[deck_index]
 		var open_count := deck_ids.filter(func(d: String) -> bool: return Game.profile.deck_unlocked(d)).size()
 		_heading(col, "1", "Deck", "%d of %d unlocked" % [open_count, deck_ids.size()], UiTheme.POINTS)
-		col.add_child(_words(DECK_WORDS, 8, UiTheme.MUTED))
 		locked = not Game.profile.deck_unlocked(id)
 		col.add_child(_picker(UiTheme.name_of(id), locked, _cycle))
 		col.add_child(_words(_deck_lock_reason(id) if locked else UiTheme.text_of(id), 10, UiTheme.MULT.lightened(0.3) if locked else UiTheme.TEXT, 26))
@@ -107,11 +120,8 @@ func _build_setup(stage: Control) -> void:
 			stake = clampi(stake, 1, top)
 			var stake_def: ContentDef = ContentDB.pool("stake")[stake - 1]
 			_heading(col, "2", "Stake", "up to %d of %d" % [top, Unlocks.TOP_STAKE], UiTheme.MULT)
-			col.add_child(_words(STAKE_WORDS, 8, UiTheme.MUTED))
 			col.add_child(_picker("Stake %d: %s" % [stake, UiTheme.name_of(stake_def.id)], false, _stake))
 			col.add_child(_words(UiTheme.text_of(stake_def.id), 10, UiTheme.TEXT, 22))
-			if top < Unlocks.TOP_STAKE and stake == top:
-				col.add_child(_words("Win a run with %s on this stake to open Stake %d." % [UiTheme.name_of(id), top + 1], 8, UiTheme.MUTED))
 	else:
 		var id: String = challenge_ids[challenge_index]
 		var open_count := challenge_ids.filter(func(c: String) -> bool: return Game.profile.challenge_unlocked(c)).size()
@@ -192,7 +202,8 @@ func _build_side(stage: Control) -> void:
 		tour.add_child(UiTheme.title("Tour in progress", 12, UiTheme.GOLD))
 		var deck_line := UiTheme.name_of(saved.challenge) if saved.challenge != "" else "%s, Stake %d" % [UiTheme.name_of(saved.deck_id), saved.stake]
 		tour.add_child(UiTheme.label(deck_line, 10))
-		tour.add_child(UiTheme.label("Town %d of 8 - %s" % [saved.town, RunScreen.SHOW_NAMES[saved.show_index]], 10))
+		var kind: String = { "quick": "Quick run - ", "bosses": "Boss rush - " }.get(saved.mode, "")
+		tour.add_child(UiTheme.label("%sTown %d of %d - %s" % [kind, saved.town, saved.final_town(), RunScreen.SHOW_NAMES[saved.show_index]], 10))
 		tour.add_child(UiTheme.label("%d ducats - %d Jesters" % [saved.ducats, saved.zanni.size()], 10, UiTheme.MUTED))
 		tour.add_child(UiTheme.button("Continue the tour", _on_continue, 12, UiTheme.POINTS))
 	else:
@@ -381,7 +392,7 @@ func _stake(step: int) -> void:
 func _on_start() -> void:
 	Feel.play("play")
 	if mode == "deck":
-		Game.new_run(deck_ids[deck_index], stake)
+		Game.new_run(deck_ids[deck_index], stake, "", "", { "mode": run_mode })
 	else:
 		Game.new_run("", 1, challenge_ids[challenge_index])
 	start.emit()

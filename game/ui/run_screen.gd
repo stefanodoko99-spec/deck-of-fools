@@ -683,32 +683,12 @@ func _build_middle() -> void:
 
 
 func _middle_shows() -> void:
-	var r := run
-	var w := floorf((area_w - 18.0) / 3.0)
-	for i in 3:
-		var panel := PanelContainer.new()
-		var active := i == r.show_index
-		var colour: Color = SHOW_COLOURS[i]
-		panel.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL_DARK, UiTheme.GOLD if active else colour.darkened(0.3)))
-		panel.position = Vector2(i * (w + 9.0), 0)
-		panel.size = Vector2(w, 104)
-		panel.modulate = Color(1, 1, 1, 1.0 if i >= r.show_index else 0.4)
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 1)
-		panel.add_child(col)
-		col.add_child(UiTheme.title(SHOW_NAMES[i], 13, colour.lightened(0.3)))
-		col.add_child(UiTheme.label("Score at least", 8, UiTheme.MUTED))
-		col.add_child(UiTheme.title(UiTheme.number(r.target_for_show(i)), 16, UiTheme.GOLD))
-		if i < Shows.PATRON:
-			var favor := r.town_favors[i]
-			if favor != "":
-				col.add_child(_wrapped("Skip for: " + UiTheme.name_of(favor), 10, w - 14.0))
-				col.add_child(_wrapped(_favor_text(i), 8, w - 14.0))
-		else:
-			col.add_child(_wrapped(UiTheme.name_of(r.town_patron), 10, w - 14.0))
-			col.get_child(col.get_child_count() - 1).add_theme_color_override("font_color", UiTheme.MULT.lightened(0.2))
-			col.add_child(_wrapped(UiTheme.text_of(r.town_patron), 8, w - 14.0))
-		middle.add_child(panel)
+	# The town as a board: a path through the Matinee, the Evening show and the Patron.
+	var track := ShowTrack.new()
+	# Uses the empty hand row too: no cards are dealt while you choose a show.
+	track.size = Vector2(area_w, 165)
+	track.setup(run, SHOW_NAMES, SHOW_COLOURS, _favor_text)
+	middle.add_child(track)
 
 
 func _favor_text(slot: int) -> String:
@@ -720,10 +700,18 @@ func _favor_text(slot: int) -> String:
 
 func _middle_show_info() -> void:
 	var col := VBoxContainer.new()
-	col.position = Vector2(0, 6)
-	col.size = Vector2(area_w, 100)
-	col.add_theme_constant_override("separation", 6)
+	col.position = Vector2(0, 2)
+	col.size = Vector2(area_w, 102)
+	col.add_theme_constant_override("separation", 4)
 	middle.add_child(col)
+	# The goal, always in view: the score to beat, progress and hands left.
+	var goal := GoalBar.new()
+	goal.title = "%s  ·  Beat %s" % [SHOW_NAMES[run.show_index], UiTheme.number(run.show_target)]
+	goal.score = run.show_score
+	goal.target = run.show_target
+	goal.hands = run.hands_left
+	goal.colour = (SHOW_COLOURS[run.show_index] as Color).darkened(0.05)
+	col.add_child(goal)
 	var patron := run.current_patron()
 	if patron != "":
 		var l := _wrapped("%s: %s" % [UiTheme.name_of(patron), UiTheme.text_of(patron)], 10, area_w)

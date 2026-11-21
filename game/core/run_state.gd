@@ -131,6 +131,8 @@ var seed_text := ""
 var deck_id := "standard"
 var stake := 1
 var phase: int = Phase.CHOOSE_SHOW
+## Game mode: "tour" (8 towns, ranked), "quick" (3 towns) or "bosses" (only Patrons).
+var mode := "tour"
 var town := 1
 var show_index := Shows.MATINEE
 var won := false
@@ -193,8 +195,9 @@ var feats: Dictionary = {}
 
 
 static func create(seed_value: String, deck := "standard", stake_level := 1, challenge_id := "",
-		locked_ids: Array = []) -> RunState:
+		locked_ids: Array = [], run_mode := "tour") -> RunState:
 	var run := RunState.new()
+	run.mode = run_mode if run_mode in ["tour", "quick", "bosses"] else "tour"
 	run.seed_text = seed_value
 	run.deck_id = deck
 	run.stake = stake_level
@@ -1057,7 +1060,7 @@ func _swap_patron() -> Dictionary:
 
 
 func _patron_pool() -> Array[ContentDef]:
-	var finale := town % Shows.FINAL_TOWN == 0
+	var finale := town % final_town() == 0
 	return ContentDB.pool("patron", func(d: ContentDef) -> bool:
 		return bool(d.data.get("finale", false)) == finale and int(d.data.get("min_town", 1)) <= town)
 
@@ -1097,8 +1100,14 @@ func _build_deck() -> void:
 			add_card(r, s)
 
 
+## The town whose Patron wins the run: 3 in a quick run, 8 otherwise.
+func final_town() -> int:
+	return 3 if mode == "quick" else Shows.FINAL_TOWN
+
+
 func _start_town() -> void:
-	show_index = Shows.MATINEE
+	# In a boss rush every town goes straight to its Patron.
+	show_index = Shows.PATRON if mode == "bosses" else Shows.MATINEE
 	phase = Phase.CHOOSE_SHOW
 	var patrons := _patron_pool()
 	town_patron = patrons[rng("patron").below(patrons.size())].id if not patrons.is_empty() else ""
@@ -1129,7 +1138,7 @@ func _advance_show() -> void:
 
 func _win_show(rescued := false) -> void:
 	phase = Phase.CASH_OUT
-	if town == Shows.FINAL_TOWN and show_index == Shows.PATRON:
+	if town == final_town() and show_index == Shows.PATRON:
 		won = true
 	_count("shows_won")
 	_count("discards_unused", discards_left)
@@ -1396,7 +1405,7 @@ func to_dict() -> Dictionary:
 	return clean({
 		"v": SAVE_VERSION,
 		"seed": seed_text, "deck": deck_id, "stake": stake,
-		"phase": phase, "town": town, "show": show_index, "won": won,
+		"phase": phase, "town": town, "show": show_index, "won": won, "mode": mode,
 		"ducats": ducats,
 		"hands": hand_levels.to_dict(),
 		"cards": full_deck.map(func(c: PlayingCard) -> Dictionary: return c.to_dict()),
@@ -1426,6 +1435,7 @@ static func from_dict(d: Dictionary) -> RunState:
 	run.stake = int(d["stake"])
 	run.phase = int(d["phase"])
 	run.town = int(d["town"])
+	run.mode = str(d.get("mode", "tour"))
 	run.show_index = int(d["show"])
 	run.won = bool(d["won"])
 	run.ducats = int(d["ducats"])

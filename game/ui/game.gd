@@ -50,7 +50,7 @@ func new_run(deck_id: String, stake: int, challenge_id := "", seed := "", meta :
 	var deck := deck_id
 	if challenge_id != "":
 		deck = str(ContentDB.get_def(challenge_id).data["deck"])
-	run = RunState.create(seed if seed != "" else _random_seed(), deck, stake, challenge_id, profile.locked_cards())
+	run = RunState.create(seed if seed != "" else _random_seed(), deck, stake, challenge_id, profile.locked_cards(), str(meta.get("mode", "tour")))
 	run_meta = meta.duplicate()
 	recorded = false
 	win_seen = false
@@ -115,7 +115,9 @@ func finish_run() -> void:
 	_save_json(PROFILE_PATH, profile.to_dict())
 	if FileAccess.file_exists(RUN_PATH):
 		DirAccess.remove_absolute(RUN_PATH)
-	Online.submit_run(run, run_meta)
+	# Quick runs and boss rushes are just for fun: only the tour is ranked.
+	if run.mode == "tour":
+		Online.submit_run(run, run_meta)
 
 
 

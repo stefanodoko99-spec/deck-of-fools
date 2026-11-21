@@ -5,6 +5,7 @@
 set -eu
 cd "$(dirname "$0")"
 GODOT="${GODOT:-$HOME/Developer/godot-4.7.2/Godot.app/Contents/MacOS/Godot}"
+./check.sh
 rm -rf build/web && mkdir -p build/web
 "$GODOT" --headless --path game --import
 "$GODOT" --headless --path game --export-release "Web" ../build/web/index.html

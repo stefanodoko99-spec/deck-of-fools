@@ -5,6 +5,7 @@
 set -eu
 cd "$(dirname "$0")"
 GODOT="${GODOT:-$HOME/Developer/godot-4.7.2/Godot.app/Contents/MacOS/Godot}"
+./check.sh
 rm -rf build/ios && mkdir -p build/ios
 "$GODOT" --headless --path game --export-release "iOS" ../build/ios/DeckOfFools.ipa 2>&1 | grep -E "ERROR|SCRIPT ERROR|error" || true
 ls build/ios

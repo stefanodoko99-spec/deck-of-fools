@@ -24,7 +24,9 @@ func record_run(run: RunState) -> void:
 	for f in run.feats:
 		feats[f] = true
 	signs_used += int(run.counters.get("used_sign", 0))
-	if run.won:
+	if run.won and run.mode != "tour":
+		pass  # Quick runs and boss rushes don't unlock decks, stakes or badges.
+	elif run.won:
 		if run.challenge != "":
 			challenges_won[run.challenge] = true
 		else:
