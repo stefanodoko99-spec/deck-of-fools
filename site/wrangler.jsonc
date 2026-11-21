@@ -1,0 +1,11 @@
+{
+  // Serves the Godot web export. index.wasm is too big for Workers static assets,
+  // so the build gzips it to index.wasm.gz and worker.js serves it with Content-Encoding: gzip.
+  "name": "deck-of-fools",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "../build/web",
+    "binding": "ASSETS"
+  }
+}

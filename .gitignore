@@ -1,0 +1,9 @@
+# Godot
+game/.godot/
+*.translation
+# Build output
+build/
+# Cloudflare / Node
+.wrangler/
+node_modules/
+.DS_Store
