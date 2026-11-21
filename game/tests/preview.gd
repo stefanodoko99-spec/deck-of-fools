@@ -88,6 +88,10 @@ static func open(main: Control, request: Dictionary) -> void:
 			for rank in [11, 12, 13, 14]:
 				views.append(_playing(rank, rank, rank % 4, "", "", big))
 			var jesters := ContentDB.pool("zanni")
+			# The illustrated Jester (Firefly art) at inspect, shop and hand sizes.
+			views.append(_item("zanni", "z_arlecchino", big))
+			views.append(_item("zanni", "z_arlecchino", Vector2(80, 112)))
+			views.append(_item("zanni", "z_arlecchino", Vector2(52, 72)))
 			for i in [0, 7, 21, 40, 63]:
 				if i < jesters.size():
 					views.append(_item("zanni", jesters[i].id, big))

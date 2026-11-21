@@ -13,6 +13,7 @@ A poker-hand roguelike about a travelling commedia dell'arte troupe. Travel thro
 | `site/` | The `deck-of-fools` Cloudflare Worker that serves the web export. |
 | `api/` | The `deck-of-fools-api` Worker: accounts, saves, runs, daily run, leaderboards (D1 database `deck-of-fools`). |
 | `build.sh` | Exports the game for the web into `build/web/` and gzips the wasm. |
+| `art.sh` | Adds a Jester illustration to `game/art/jesters/` (see [docs/ART.md](docs/ART.md)). |
 
 This repository was rebuilt from the live build on 2026-11-21 because the original project folder was lost. See [RECOVERY.md](RECOVERY.md) for what came back and what didn't.
 

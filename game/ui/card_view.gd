@@ -99,6 +99,9 @@ var draggable := false
 var swipeable := false
 
 var baking := false
+## Illustrated art for this card, loaded before the bake. Loading a texture for the
+## first time inside _draw gives a blank white image in the one-shot bake.
+var art_texture: Texture2D = null
 
 var _face: TextureRect
 var _overlay: Control
@@ -173,6 +176,10 @@ func baked_copy() -> CardView:
 	copy.face_down = face_down
 	copy.back_style = _back_index()
 	copy.baking = true
+	copy.art_texture = art_for(kind, def_id)
+	# Illustrated Jester art is far larger than the card, so shrink it smoothly
+	# (the project default is pixel-sharp nearest filtering).
+	copy.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	return copy
 
 
@@ -695,9 +702,8 @@ func _draw_named(r: Rect2) -> void:
 	var pane := Paint.round_rect(window, 4.6 * k)
 	var seed_value := absi(def_id.hash())
 	var art: JesterArt = null
-	var art_path := "res://art/jesters/%s.webp" % def_id
-	if kind == "zanni" and ResourceLoader.exists(art_path):
-		_draw_art(load(art_path), window, pane)
+	if art_texture != null:
+		_draw_art(art_texture, window, pane)
 	elif kind == "zanni" and JesterArt.has_design(def_id):
 		art = JesterArt.new(self)
 		art.defer_badge = true
@@ -720,6 +726,14 @@ func _draw_named(r: Rect2) -> void:
 	if sticker != "":
 		draw_string(UiTheme.bold, Vector2(7, 22) * k, sticker.left(1).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, int(round(9 * k)), Color.WHITE)
 	_gloss(r)
+
+
+## The illustrated art for a Jester, or null while it only has a drawn design.
+static func art_for(card_kind: String, id: String) -> Texture2D:
+	var path := "res://art/jesters/%s.webp" % id
+	if card_kind != "zanni" or not ResourceLoader.exists(path):
+		return null
+	return load(path)
 
 
 ## Draw a texture clipped to a polygon (the rounded art window), filling `window`.
