@@ -365,31 +365,59 @@ static func stage(parent: Control) -> Control:
 	s.offset_top = -STAGE.y / 2.0
 	s.offset_bottom = STAGE.y / 2.0
 	parent.add_child(s)
-	if OS.has_feature("mobile"):
-		_fit_safe_area(s)
+	_fit_safe_area(s)
+	# Refit when the window changes (rotation, Safari's toolbars, a resized browser),
+	# for as long as this stage is on screen.
+	var view := s.get_viewport()
+	var refit := func() -> void: _fit_safe_area(s)
+	view.size_changed.connect(refit)
+	s.tree_exiting.connect(func() -> void:
+		if view.size_changed.is_connected(refit):
+			view.size_changed.disconnect(refit))
 	return s
 
 
-## In the phone apps, keep the 640x360 stage inside the screen's safe area (clear
-## of the notch, the Dynamic Island and the home indicator), scaled down a little
-## if needed. The backdrop still fills the whole screen. Browsers handle this
-## themselves, so the web build never needs it.
+## The part of the screen clear of the notch, the Dynamic Island and the home
+## indicator, in viewport units. On the web it comes from Safari's CSS safe-area
+## insets (web/shell.html, with viewport-fit=cover so the page runs edge to edge);
+## in the phone apps from the OS. Elsewhere it is the whole viewport.
+static func safe_area(node: Node) -> Rect2:
+	var view := node.get_viewport().get_visible_rect().size
+	var full := Rect2(Vector2.ZERO, view)
+	if OS.has_feature("web"):
+		var raw := str(JavaScriptBridge.eval("window.dofSafeArea ? window.dofSafeArea() : ''", true))
+		var f: Variant = JSON.parse_string(raw) if raw != "" else null
+		if f is Array and (f as Array).size() == 4:
+			var l: float = f[0]
+			var t: float = f[1]
+			var r: float = f[2]
+			var b: float = f[3]
+			return Rect2(view.x * l, view.y * t, view.x * (1.0 - l - r), view.y * (1.0 - t - b))
+		return full
+	if OS.has_feature("mobile"):
+		var window := Vector2(DisplayServer.window_get_size())
+		var safe := Rect2(DisplayServer.get_display_safe_area())
+		if window.x > 0.0 and safe.size.x > 0.0:
+			var to_view := view.x / window.x
+			return Rect2(safe.position * to_view, safe.size * to_view)
+	return full
+
+
+## Keep the 640x360 stage inside the safe area, scaled down a little if needed and
+## centred in it. The backdrop behind still fills the whole screen.
 static func _fit_safe_area(s: Control) -> void:
-	var window := Vector2(DisplayServer.window_get_size())
-	var safe := Rect2(DisplayServer.get_display_safe_area())
-	var view := s.get_viewport_rect().size
-	if window.x <= 0.0 or safe.size.x <= 0.0:
+	if not is_instance_valid(s) or not s.is_inside_tree():
 		return
-	var to_view := view.x / window.x
-	var area := Rect2(safe.position * to_view, safe.size * to_view)
+	var view := s.get_viewport().get_visible_rect().size
+	var area := safe_area(s)
 	var k := minf(1.0, minf(area.size.x / STAGE.x, area.size.y / STAGE.y))
 	s.pivot_offset = STAGE / 2.0
 	s.scale = Vector2(k, k)
 	var shift := area.get_center() - view / 2.0
-	s.offset_left += shift.x
-	s.offset_right += shift.x
-	s.offset_top += shift.y
-	s.offset_bottom += shift.y
+	s.offset_left = -STAGE.x / 2.0 + shift.x
+	s.offset_right = STAGE.x / 2.0 + shift.x
+	s.offset_top = -STAGE.y / 2.0 + shift.y
+	s.offset_bottom = STAGE.y / 2.0 + shift.y
 
 
 

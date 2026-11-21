@@ -23,6 +23,9 @@ const JESTER_CARD := Vector2(54, 76)
 const ITEM_CARD := Vector2(48, 66)
 const SHOP_CARD := Vector2(60, 84)
 const MAX_STAGE_WIDTH := 920.0
+## The safe area this layout was built for, and the scale that fits 360 into it.
+var safe := Rect2()
+var fit := 1.0
 
 
 const ACTION_CUES := {
@@ -118,7 +121,11 @@ func _exit_tree() -> void:
 
 
 func _layout() -> void:
-	var room := get_viewport_rect().size.x - 8.0
+	# Fit inside the safe area (clear of the notch and home indicator on iPhone):
+	# scale down if it is shorter than 360, then use all of its width.
+	safe = UiTheme.safe_area(self)
+	fit = minf(1.0, safe.size.y / 360.0)
+	var room := safe.size.x / fit - 8.0
 	stage_w = clampf(room, 640.0, MAX_STAGE_WIDTH)
 	area_w = stage_w - AREA_X - 4.0
 	var k := Settings.card_scale()
@@ -143,6 +150,13 @@ func _build_screen() -> void:
 	stage.offset_right = stage_w / 2.0
 	stage.offset_top = -180.0
 	stage.offset_bottom = 180.0
+	stage.pivot_offset = Vector2(stage_w, 360.0) / 2.0
+	stage.scale = Vector2(fit, fit)
+	var shift := safe.get_center() - get_viewport_rect().size / 2.0
+	stage.offset_left += shift.x
+	stage.offset_right += shift.x
+	stage.offset_top += shift.y
+	stage.offset_bottom += shift.y
 	add_child(stage)
 	_build_side()
 	top_row = _area(Vector2(AREA_X, 4), Vector2(area_w, 80))

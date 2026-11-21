@@ -18,4 +18,7 @@ if grep -q CONTACT_EMAIL site/public/*.html; then
 else
 	cp site/public/*.html build/web/
 fi
+# iOS launch screens for the installed web app.
+mkdir -p build/web/splash
+cp site/public/splash/*.png build/web/splash/
 ls -la build/web

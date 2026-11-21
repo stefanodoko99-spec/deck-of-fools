@@ -6,7 +6,8 @@ extends Node
 
 
 
-const MAX_SCALE := [1.5, 2.5, 4.0]
+## Bake scale by graphics setting; Medium (the web default) reaches 3x for Retina phones.
+const MAX_SCALE := [1.5, 3.0, 4.0]
 
 const KEEP := 220
 
