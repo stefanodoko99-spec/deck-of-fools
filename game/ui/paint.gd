@@ -1,8 +1,7 @@
 class_name Paint
 extends RefCounted
-## Shared painting tools for the Venetian carnival look of cards and Jesters:
-## shapes lit from the top left so they read as rounded, warm sepia ink lines,
-## gold leaf, soft candle glows, vignettes and the pointed Venetian arch.
+## Shared drawing tools for cards and Jesters: flat modern fills with a gentle
+## top-left light, soft same-hue edges, gradients, glows and rounded shapes.
 
 const INK := Color("2b1b12")
 const GOLD_HI := Color("fff2c0")
@@ -28,7 +27,7 @@ static func lit(canvas: CanvasItem, points: PackedVector2Array, colour: Color, s
 	for p in points:
 		var t := (p.y - box.position.y) / maxf(0.001, box.size.y)
 		var u := (p.x - box.position.x) / maxf(0.001, box.size.x)
-		var shade := (0.34 * (0.5 - t) + 0.12 * (0.5 - u)) * strength
+		var shade := (0.12 * (0.5 - t) + 0.04 * (0.5 - u)) * strength
 		colours.append(colour.lightened(shade) if shade > 0.0 else colour.darkened(-shade))
 	canvas.draw_polygon(points, colours)
 
@@ -37,8 +36,8 @@ static func lit(canvas: CanvasItem, points: PackedVector2Array, colour: Color, s
 static func ink(canvas: CanvasItem, points: PackedVector2Array, colour: Color, width := 0.7) -> void:
 	if points.size() < 2:
 		return
-	var line := colour.darkened(0.55).lerp(INK, 0.45)
-	line.a = 0.85 * colour.a
+	var line := colour.darkened(0.3)
+	line.a = 0.5 * colour.a
 	canvas.draw_polyline(closed(points), line, width, true)
 
 

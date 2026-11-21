@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://doak8l8eawlqe"
-path="res://.godot/imported/AlegreyaSans-ExtraBold.ttf-5df87ec3d74f98aa7c63fde88f7f84e1.fontdata"
+uid="uid://bayxf30ygm5r0"
+path="res://.godot/imported/Inter.ttf-71b212663852a96aaf75183f12ecf9e4.fontdata"
 
 [deps]
 
-source_file="res://fonts/AlegreyaSans-ExtraBold.ttf"
-dest_files=["res://.godot/imported/AlegreyaSans-ExtraBold.ttf-5df87ec3d74f98aa7c63fde88f7f84e1.fontdata"]
+source_file="res://fonts/Inter.ttf"
+dest_files=["res://.godot/imported/Inter.ttf-71b212663852a96aaf75183f12ecf9e4.fontdata"]
 
 [params]
 

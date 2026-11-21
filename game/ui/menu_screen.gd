@@ -61,18 +61,18 @@ func _build() -> void:
 	var stage := UiTheme.stage(self)
 
 	# A large title over the left column, with the account chip at the top right.
-	var title := UiTheme.title("DECK OF FOOLS", 30, UiTheme.GOLD)
+	var title := UiTheme.title("Deck of Fools", 30, UiTheme.GOLD)
 	title.position = Vector2(LEFT.x, 0)
 	title.size = Vector2(LEFT_W, 38)
 	stage.add_child(title)
-	var sub := UiTheme.title("A troupe of Jesters against the house", 10, UiTheme.TEXT)
-	sub.position = Vector2(LEFT.x + 2, 35)
+	var sub := UiTheme.label("A troupe of Jesters against the house", 10, UiTheme.TEXT)
+	sub.position = Vector2(LEFT.x + 2, 36)
 	sub.size = Vector2(LEFT_W, 16)
 	stage.add_child(sub)
 
 	_build_setup(stage)
 	_build_side(stage)
-	_build_account_chip(stage)
+	_build_top_bar(stage)
 
 
 
@@ -86,10 +86,11 @@ func _build_setup(stage: Control) -> void:
 	col.add_theme_constant_override("separation", 3)
 	panel.add_child(col)
 
-	var tabs := HBoxContainer.new()
-	tabs.add_theme_constant_override("separation", 4)
-	tabs.add_child(_tab("New run", "deck"))
-	tabs.add_child(_tab("Challenges", "challenge"))
+	# New run / Challenges as an iOS segmented control.
+	var tabs := UiTheme.segmented(["New run", "Challenges"], 0 if mode == "deck" else 1, func(i: int) -> void:
+		Feel.play("select")
+		mode = "deck" if i == 0 else "challenge"
+		_build(), 10)
 	col.add_child(tabs)
 
 	var locked := false
@@ -139,15 +140,6 @@ func _build_setup(stage: Control) -> void:
 		stage.add_child(warn)
 
 
-func _tab(text: String, tab_mode: String) -> Button:
-	var b := UiTheme.button(text, func() -> void:
-		mode = tab_mode
-		_build(), 10, UiTheme.PANEL_LIGHT.lightened(0.15) if mode == tab_mode else UiTheme.PANEL_DARK)
-	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	return b
-
-
-
 func _heading(col: Control, number: String, text: String, note: String, colour: Color) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -162,12 +154,12 @@ func _heading(col: Control, number: String, text: String, note: String, colour: 
 
 func _picker(text: String, locked: bool, step: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_child(UiTheme.button("<", func() -> void: step.call(-1)))
+	row.add_child(UiTheme.icon_button("back", func() -> void: step.call(-1), 24.0))
 	var name_label := UiTheme.title(("Locked: " if locked else "") + text, 13, UiTheme.MUTED if locked else UiTheme.TEXT)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(name_label)
-	row.add_child(UiTheme.button(">", func() -> void: step.call(1)))
+	row.add_child(UiTheme.icon_button("forward", func() -> void: step.call(1), 24.0))
 	return row
 
 
@@ -209,17 +201,6 @@ func _build_side(stage: Control) -> void:
 
 	_build_daily(col)
 
-	var more := GridContainer.new()
-	more.columns = 2
-	more.add_theme_constant_override("h_separation", 4)
-	more.add_theme_constant_override("v_separation", 4)
-	for entry in [["Profile", func() -> void: _open(ProfileSheet.new())], ["Leaderboards", func() -> void: _open(LeaderboardSheet.new())],
-			["How to play", func() -> void: _open(HowToPlay.new())], ["Settings", func() -> void: _open(SettingsSheet.new())]]:
-		var b := UiTheme.button(entry[0], entry[1], 11, UiTheme.POINTS.darkened(0.15) if entry[0] != "Settings" else UiTheme.PANEL_LIGHT)
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(0, 24)
-		more.add_child(b)
-	col.add_child(more)
 
 
 
@@ -275,18 +256,65 @@ func _start_daily(ranked: bool) -> void:
 
 
 
-func _build_account_chip(stage: Control) -> void:
+func _build_top_bar(stage: Control) -> void:
+	# Top right, as in iPhone apps: the account chip, then round icon buttons.
+	var bar := HBoxContainer.new()
+	bar.alignment = BoxContainer.ALIGNMENT_END
+	bar.add_theme_constant_override("separation", 6)
+	bar.position = Vector2(RIGHT_X - 40, 7)
+	bar.size = Vector2(RIGHT_W + 40, 30)
+	stage.add_child(bar)
+	bar.add_child(_account_chip())
+	bar.add_child(UiTheme.icon_button("trophy", func() -> void: _open(LeaderboardSheet.new()), 28.0))
+	bar.add_child(UiTheme.icon_button("help", func() -> void: _open(HowToPlay.new()), 28.0))
+	bar.add_child(UiTheme.icon_button("settings", func() -> void: _open(SettingsSheet.new()), 28.0))
+
+
+func _account_chip() -> Button:
 	var name_text := str(Online.user.get("name", "Offline")) if Online.signed_in() else "Offline"
-	var label := name_text + (" - save your progress" if Online.signed_in() and Online.is_guest() else "")
-	var chip := UiTheme.button(label, func() -> void: _open(ProfileSheet.new()), 10, UiTheme.PANEL_DARK)
-	chip.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	stage.add_child(chip)
-	# Size the chip only once it is in the tree. Before that it measures its text with the
-	# default 16 px theme font, grows to fit, and never shrinks back, so a guest's
-	# "save your progress" label ran off the right edge. Keep the right edge fixed and
-	# let a longer label (or a larger text size) grow to the left.
-	chip.size = Vector2(190, 20)
-	chip.position = Vector2(RIGHT_X + RIGHT_W - chip.size.x, 8)
+	var nudge := Online.signed_in() and Online.is_guest()
+	var chip := UiTheme.button("", func() -> void: _open(ProfileSheet.new()))
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 4
+	row.offset_right = -10
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip.add_child(row)
+	# Avatar: a gold disc with the profile glyph.
+	var avatar := Panel.new()
+	avatar.custom_minimum_size = Vector2(22, 22)
+	avatar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	avatar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var disc := StyleBoxFlat.new()
+	disc.bg_color = UiTheme.GOLD
+	disc.set_corner_radius_all(99)
+	disc.anti_aliasing = true
+	avatar.add_theme_stylebox_override("panel", disc)
+	var glyph := UiIcon.new("profile", UiTheme.INK)
+	glyph.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glyph.offset_left = 4
+	glyph.offset_top = 4
+	glyph.offset_right = -4
+	glyph.offset_bottom = -4
+	avatar.add_child(glyph)
+	row.add_child(avatar)
+	var lines := VBoxContainer.new()
+	lines.add_theme_constant_override("separation", -4)
+	lines.alignment = BoxContainer.ALIGNMENT_CENTER
+	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var who := UiTheme.label(name_text, 10, UiTheme.TEXT)
+	who.add_theme_font_override("font", UiTheme.bold)
+	lines.add_child(who)
+	if nudge:
+		lines.add_child(UiTheme.label("Save your progress", 8, UiTheme.GOLD))
+	row.add_child(lines)
+	var widest := UiTheme.bold.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(10)).x
+	if nudge:
+		widest = maxf(widest, UiTheme.font.get_string_size("Save your progress", HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(8)).x)
+	chip.custom_minimum_size = Vector2(minf(170.0, widest + 46.0), 30)
+	return chip
 
 
 func _open(sheet: Control) -> void:

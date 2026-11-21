@@ -45,9 +45,9 @@ func draw(window: Rect2, pane: PackedVector2Array, def_id: String) -> void:
 ## Court cards: the King is the Doge, the Queen a masked noblewoman, the Jack
 ## Arlecchino, dressed in their suit's colour against a matching Venetian sky.
 static func court_design(rank: int, suit: int) -> Array:
-	var red := suit == PlayingCard.Suit.HEARTS or suit == PlayingCard.Suit.DIAMONDS
-	var robe := "crimson" if red else "navy"
-	var sky := "wine" if red else "sea"
+	# Dressed and lit in their suit's colour: spades navy, hearts red, clubs green, diamonds blue.
+	var robe: String = ["navy", "crimson", "green", "blue"][clampi(suit, 0, 3)]
+	var sky: String = ["night", "wine", "forest", "sky"][clampi(suit, 0, 3)]
 	match rank:
 		PlayingCard.KING:
 			return [sky, "rays", "doge", "none", "smile", "robe", robe, "gold", "goblet", "", "beard"]
@@ -65,10 +65,10 @@ func draw_design(window: Rect2, pane: PackedVector2Array, d: Array, n: int) -> v
 	b = JesterDesigns.COLOURS[d[7]]
 	hair = HAIRS[n % HAIRS.size()]
 	var back: Color = JesterDesigns.BACKDROPS[d[0]]
-	# A brighter, more saturated sky than the old flat backdrops, lit by a candle behind the head.
-	var sky := Color.from_hsv(back.h, minf(1.0, back.s * 1.15), minf(1.0, back.v * 1.55 + 0.08))
-	_gradient(pane, sky.lightened(0.22), sky.darkened(0.35))
-	Paint.glow(canvas, h + Vector2(0, -s * 0.25), s * 1.25, Color(Paint.GOLD_HI, 0.55))
+	# A clean, bright backdrop with a soft light behind the head.
+	var sky := Color.from_hsv(back.h, minf(1.0, back.s * 1.1 + 0.1), minf(1.0, back.v * 1.9 + 0.22))
+	_gradient(pane, sky.lightened(0.18), sky.darkened(0.12))
+	Paint.glow(canvas, h + Vector2(0, -s * 0.2), s * 1.1, Color(1, 1, 1, 0.35))
 	_pattern(pane, str(d[1]), sky)
 	var mask := str(d[3])
 	var skin: Color = SKINS[(n / 7) % SKINS.size()]
@@ -91,7 +91,6 @@ func draw_design(window: Rect2, pane: PackedVector2Array, d: Array, n: int) -> v
 	_extras(extras, covered, mask != "none" and mask != "white" and mask != "wood")
 	_hat(str(d[2]))
 	_prop(str(d[8]))
-	Paint.vignette(canvas, w, Color(0.05, 0.02, 0.06, 0.3), minf(w.size.x, w.size.y) * 0.22)
 	badge_effect = str(d[9])
 	if not defer_badge:
 		draw_badge()
@@ -181,7 +180,7 @@ func _star(at: Vector2, radius: float, colour: Color) -> void:
 
 
 func _pattern(pane: PackedVector2Array, kind: String, back: Color) -> void:
-	var light := Color(back.lightened(0.45).lerp(Paint.GOLD_HI, 0.4), 0.26)
+	var light := Color(1, 1, 1, 0.16)
 	var c := w.get_center()
 	var far := w.size.length()
 	var shapes: Array[PackedVector2Array] = []

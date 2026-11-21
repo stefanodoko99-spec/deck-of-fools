@@ -244,13 +244,13 @@ func _build_side() -> void:
 	info_text.custom_minimum_size = Vector2(122, 0)
 	info.add_child(info_name)
 	info.add_child(info_text)
+	# Round icon buttons: pause, run info, how to play.
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 3)
-	var pause := UiTheme.button("Pause", _pause, 11, UiTheme.PANEL_LIGHT)
-	pause.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(pause)
-	row.add_child(UiTheme.button("Info", func() -> void: _open(RunInfoSheet.new()), 11, UiTheme.POINTS.darkened(0.15)))
-	row.add_child(UiTheme.button("?", func() -> void: _open(HowToPlay.new()), 11, UiTheme.POINTS))
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	row.add_child(UiTheme.icon_button("pause", _pause, 26.0))
+	row.add_child(UiTheme.icon_button("info", func() -> void: _open(RunInfoSheet.new()), 26.0))
+	row.add_child(UiTheme.icon_button("help", func() -> void: _open(HowToPlay.new()), 26.0))
 	col.add_child(row)
 
 
@@ -267,7 +267,9 @@ func _open(sheet: Control) -> void:
 
 func _block(parent: Control, bg: Color, border: Color) -> VBoxContainer:
 	var box := PanelContainer.new()
-	var style := UiTheme.box(bg, border, 4)
+	var style := UiTheme.box(bg, border, 10)
+	style.content_margin_left = 2
+	style.content_margin_right = 2
 	style.content_margin_top = 2
 	style.content_margin_bottom = 3
 	box.add_theme_stylebox_override("panel", style)
@@ -294,9 +296,14 @@ func _counter(parent: Control, caption: String, colour: Color) -> Label:
 	inner.get_parent().size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var number := UiTheme.title("0", 13, colour)
 	number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	number.clip_text = true
 	inner.add_child(number)
+	# Captions clip rather than widen the side panel into the hand.
 	var l := UiTheme.label(caption, 8, UiTheme.MUTED)
+	l.add_theme_font_size_override("font_size", 8)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.clip_text = true
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	inner.add_child(l)
 	return number
 
