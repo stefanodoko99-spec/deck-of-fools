@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>$GODOT_PROJECT_NAME</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: $GODOT_SPLASH_COLOR;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<!-- Deck of Fools: installs as an app on iPhone, iPad, Android and desktop. -->
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black">
+		<meta name="apple-mobile-web-app-title" content="Deck of Fools">
+		<meta name="theme-color" content="#1e0b3d">
+		<meta name="description" content="A poker-hand roguelike about a travelling commedia dell'arte troupe.">
+		<style>
+body { background-color: #1e0b3d; }
+.dof-layer { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; font: 500 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; color: #fbf3e4; -webkit-font-smoothing: antialiased; }
+/* Phones held upright: the game is landscape only. */
+#rotate-hint { background: radial-gradient(circle at 50% 40%, #8e1230, #1e0b3d 75%); flex-direction: column; gap: 14px; text-align: center; padding: 24px; font-weight: 600; font-size: 19px; }
+#rotate-hint .phone { width: 46px; height: 76px; border: 4px solid #e2aa3e; border-radius: 10px; animation: dof-turn 2.4s ease-in-out infinite; }
+@keyframes dof-turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+@media (orientation: portrait) and (max-width: 600px) { #rotate-hint { display: flex; } }
+/* Install sheet: how to add the game as an app where the browser has no prompt. */
+#install-sheet { background: rgba(5, 0, 12, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+#install-sheet.open { display: flex; }
+#install-sheet .card { position: relative; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 22px 22px 18px; border-radius: 22px; background: rgba(26, 14, 49, 0.97); border: 1px solid rgba(255, 255, 255, 0.13); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); animation: dof-rise .26s cubic-bezier(.2, .8, .2, 1); }
+@keyframes dof-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+#install-sheet .top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+#install-sheet .top img { width: 56px; height: 56px; border-radius: 13px; box-shadow: 0 4px 14px rgba(0, 0, 0, .4); }
+#install-sheet h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.01em; color: #f0b84a; }
+#install-sheet .sub { margin: 2px 0 0; font-size: 14px; color: #cbbfe0; }
+#install-sheet ol { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+#install-sheet li { counter-increment: step; display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin: 6px 0; border-radius: 14px; background: rgba(255, 255, 255, 0.06); }
+#install-sheet li::before { content: counter(step); flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 14px; color: #1d1230; background: #f0b84a; }
+#install-sheet .glyph { display: inline-grid; place-items: center; width: 26px; height: 26px; vertical-align: middle; margin: 0 2px; border-radius: 7px; background: rgba(255, 255, 255, 0.12); }
+#install-sheet .glyph svg { width: 16px; height: 16px; }
+#install-sheet .done { display: block; width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 999px; font: inherit; font-weight: 700; color: #1d1230; background: #fbf3e4; cursor: pointer; }
+#install-sheet .close { position: absolute; top: 14px; right: 14px; width: 30px; height: 30px; border: 1px solid rgba(255, 255, 255, .16); border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fbf3e4; font-size: 18px; line-height: 1; cursor: pointer; }
+/* Phones in landscape are short: tighten the sheet so "Got it" stays on screen. */
+@media (max-height: 480px) {
+	#install-sheet .card { padding: 14px 16px 12px; border-radius: 18px; width: min(460px, calc(100vw - 24px)); }
+	#install-sheet .top { margin-bottom: 8px; gap: 10px; }
+	#install-sheet .top img { width: 40px; height: 40px; border-radius: 10px; }
+	#install-sheet h2 { font-size: 18px; }
+	#install-sheet .sub { font-size: 13px; }
+	#install-sheet li { padding: 6px 10px; margin: 4px 0; font-size: 14px; line-height: 1.3; }
+	#install-sheet li::before { width: 22px; height: 22px; font-size: 12px; }
+	#install-sheet .glyph { width: 22px; height: 22px; }
+	#install-sheet .done { margin-top: 8px; padding: 9px; }
+	#install-sheet .close { top: 10px; right: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { #rotate-hint .phone { animation: none; transform: rotate(-90deg); } #install-sheet .card { animation: none; } }
+		</style>
+		<script>
+/* Install support for the game. The game's menu asks window.dofInstallState()
+   whether to show its "Install app" button and calls window.dofInstall() when
+   it is pressed: Chrome, Edge and Android get the browser's own install prompt;
+   Safari and other browsers without one get a short sheet of steps. */
+(function () {
+	var deferred = null;
+	window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; });
+	window.addEventListener('appinstalled', function () { deferred = null; installed = true; });
+	var installed = false;
+	var ua = navigator.userAgent;
+	var android = /Android/.test(ua);
+	// iPadOS reports itself as a Mac; a Mac with a touchscreen is an iPad.
+	var iOS = !android && (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+	var chromium = /Chrome\/|Chromium\/|Edg\//.test(ua) && !/OPR\//.test(ua);
+	var macSafari = !iOS && /Macintosh/.test(ua) && /Version\/\d+.*Safari\//.test(ua) && !chromium;
+	function standalone() {
+		return installed || navigator.standalone === true || ['standalone', 'fullscreen', 'minimal-ui'].some(function (m) {
+			return window.matchMedia('(display-mode: ' + m + ')').matches;
+		});
+	}
+	window.dofInstallState = function () {
+		if (standalone()) return 'installed';
+		if (deferred) return 'prompt';
+		if (iOS) return 'ios';
+		if (macSafari) return 'mac';
+		if (android) return 'android';
+		if (chromium) return 'desktop';
+		return 'none';
+	};
+	var SHARE = '<span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="#fbf3e4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5"/><path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8"/></svg></span>';
+	var PLUS = '<span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="#fbf3e4" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>';
+	var DOTS = '<span class="glyph"><svg viewBox="0 0 24 24" fill="#fbf3e4"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>';
+	var STEPS = {
+		ios: ['Tap ' + SHARE + ' <b>Share</b> in the browser toolbar.', 'Scroll down and tap ' + PLUS + ' <b>Add to Home Screen</b>.', 'Open <b>Deck of Fools</b> from your Home Screen. It plays full screen and works offline.'],
+		mac: ['In Safari, open the <b>File</b> menu.', 'Choose <b>Add to Dock</b>, then <b>Add</b>.', 'Open <b>Deck of Fools</b> from your Dock or Launchpad.'],
+		android: ['Tap ' + DOTS + ' the browser menu.', 'Tap <b>Install app</b> or <b>Add to Home screen</b>.', 'Open <b>Deck of Fools</b> from your home screen.'],
+		desktop: ['Click the install icon at the right of the address bar, or open ' + DOTS + ' the browser menu.', 'Choose <b>Install Deck of Fools</b>.', 'It opens in its own window, like any app.'],
+	};
+	function sheet(kind) {
+		var layer = document.getElementById('install-sheet');
+		var steps = STEPS[kind] || STEPS.desktop;
+		layer.innerHTML = '<div class="card" role="dialog" aria-modal="true" aria-labelledby="install-title">' +
+			'<button class="close" aria-label="Close">&times;</button>' +
+			'<div class="top"><img src="index.apple-touch-icon.png" alt=""><div><h2 id="install-title">Install Deck of Fools</h2><p class="sub">Play from your ' + (kind === 'mac' || kind === 'desktop' ? 'Dock or desktop' : 'Home Screen') + ', full screen.</p></div></div>' +
+			'<ol>' + steps.map(function (s) { return '<li><span>' + s + '</span></li>'; }).join('') + '</ol>' +
+			'<button class="done">Got it</button></div>';
+		var close = function () { layer.classList.remove('open'); document.getElementById('canvas').focus(); };
+		layer.querySelector('.close').onclick = close;
+		layer.querySelector('.done').onclick = close;
+		layer.onclick = function (e) { if (e.target === layer) close(); };
+		layer.classList.add('open');
+	}
+	window.dofInstall = function () {
+		if (deferred) {
+			var prompt = deferred;
+			deferred = null;
+			prompt.prompt();
+			return 'prompt';
+		}
+		var state = window.dofInstallState();
+		if (state !== 'installed' && state !== 'none') sheet(state);
+		return state;
+	};
+})();
+		</script>
+		$GODOT_HEAD_INCLUDE
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" src="$GODOT_SPLASH" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<div id="rotate-hint" class="dof-layer" role="alert"><div class="phone" aria-hidden="true"></div><div>Turn your phone sideways to play</div></div>
+		<div id="install-sheet" class="dof-layer"></div>
+
+		<script src="$GODOT_URL"></script>
+		<script>
+const GODOT_CONFIG = $GODOT_CONFIG;
+const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>

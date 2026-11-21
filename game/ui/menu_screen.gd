@@ -261,13 +261,44 @@ func _build_top_bar(stage: Control) -> void:
 	var bar := HBoxContainer.new()
 	bar.alignment = BoxContainer.ALIGNMENT_END
 	bar.add_theme_constant_override("separation", 6)
-	bar.position = Vector2(RIGHT_X - 40, 7)
-	bar.size = Vector2(RIGHT_W + 40, 30)
+	bar.position = Vector2(220, 7)
+	bar.size = Vector2(RIGHT_X + RIGHT_W - 220, 30)
 	stage.add_child(bar)
+	if _can_install():
+		bar.add_child(_install_button())
 	bar.add_child(_account_chip())
 	bar.add_child(UiTheme.icon_button("trophy", func() -> void: _open(LeaderboardSheet.new()), 28.0))
 	bar.add_child(UiTheme.icon_button("help", func() -> void: _open(HowToPlay.new()), 28.0))
 	bar.add_child(UiTheme.icon_button("settings", func() -> void: _open(SettingsSheet.new()), 28.0))
+
+
+## In a browser that can add the game as an app (and isn't already running as
+## one), offer it. web/shell.html does the work: the browser's own install
+## prompt where there is one, otherwise a sheet of steps (Share, Add to Home Screen).
+func _can_install() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var state := str(JavaScriptBridge.eval("window.dofInstallState ? window.dofInstallState() : 'none'", true))
+	return state != "installed" and state != "none"
+
+
+func _install_button() -> Button:
+	var b := UiTheme.button("Install app", func() -> void:
+		Feel.play("click")
+		JavaScriptBridge.eval("window.dofInstall && window.dofInstall()", true), 10, UiTheme.GOLD)
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.custom_minimum_size = Vector2(0, 28)
+	b.add_theme_constant_override("h_separation", 4)
+	var glyph := UiIcon.new("download", UiTheme.INK)
+	glyph.custom_minimum_size = Vector2(14, 14)
+	glyph.position = Vector2(9, 7)
+	glyph.size = Vector2(14, 14)
+	b.add_child(glyph)
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var st := b.get_theme_stylebox(state) as StyleBoxFlat
+		if st != null:
+			st.content_margin_left = 26
+	return b
 
 
 func _account_chip() -> Button:

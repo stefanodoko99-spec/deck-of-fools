@@ -2,7 +2,7 @@ class_name UiIcon
 extends Control
 ## Line icons drawn in code, so they stay sharp at any size: rounded strokes in
 ## the style of the system icons on iPhone. Names: settings, profile, trophy,
-## help, info, pause, close, back, forward.
+## help, info, pause, close, back, forward, download.
 
 var icon := ""
 var colour := Color.WHITE
@@ -61,5 +61,9 @@ func _draw() -> void:
 			line.call(PackedVector2Array([at.call(0.72, 0.28), at.call(0.28, 0.72)]))
 		"back":
 			line.call(PackedVector2Array([at.call(0.62, 0.22), at.call(0.34, 0.5), at.call(0.62, 0.78)]))
+		"download":
+			line.call(PackedVector2Array([at.call(0.5, 0.16), at.call(0.5, 0.6)]))
+			line.call(PackedVector2Array([at.call(0.32, 0.43), at.call(0.5, 0.61), at.call(0.68, 0.43)]))
+			line.call(PackedVector2Array([at.call(0.2, 0.66), at.call(0.2, 0.82), at.call(0.8, 0.82), at.call(0.8, 0.66)]))
 		"forward":
 			line.call(PackedVector2Array([at.call(0.38, 0.22), at.call(0.66, 0.5), at.call(0.38, 0.78)]))
