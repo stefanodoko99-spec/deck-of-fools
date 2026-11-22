@@ -31,7 +31,10 @@ export default {
       }
       return env.ASSETS.fetch(req);
     }
-    const [encoding, path] = pick(req.headers.get("Accept-Encoding") || "", entry.variants);
+    // Cloudflare may rewrite Accept-Encoding before the Worker sees it; the browser's
+    // own value is kept in cf.clientAcceptEncoding.
+    const accept = (req.cf && req.cf.clientAcceptEncoding) || req.headers.get("Accept-Encoding") || "";
+    const [encoding, path] = pick(accept, entry.variants);
     const asset = await env.ASSETS.fetch(new Request(new URL(path, url), req));
     const headers = new Headers({
       "Content-Type": entry.type,

@@ -53,12 +53,15 @@ func purchase(product_id: String) -> String:
 			transaction = await _buy_live(product_id)
 			if transaction == "":
 				return "The purchase didn't go through."
+	# The profile may have been replaced (a cloud pull) while the store sheet was open:
+	# deliver into the wallet that is current now.
+	wallet = Game.wallet()
 	var reason := ShopCatalog.deliver(product_id, wallet)
 	if reason != "":
 		return reason
 	wallet.log_purchase(product_id, mode, mode == "test", transaction)
 	Game.save_profile()
-	Ads.last_purchase = Ads.now()
+	Ads.note_purchase()
 	Feel.play("jackpot")
 	purchased.emit(product_id)
 	return ""

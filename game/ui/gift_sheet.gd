@@ -188,7 +188,7 @@ func _build_reveal(col: VBoxContainer) -> void:
 		waiting.disabled = true
 		waiting.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		col.add_child(waiting)
-	elif Ads.can_offer("daily_gift"):
+	elif Game.can_double_gift() and Ads.can_offer("daily_gift"):
 		col.add_child(_ad_button())
 	else:
 		col.add_child(_centred_label(next, 10, UiTheme.MUTED))
@@ -252,6 +252,11 @@ func _claim() -> void:
 
 func _double() -> void:
 	if _watching or _doubled or _gift.is_empty():
+		return
+	# Never play an ad that can't pay out: today's gift may already be doubled.
+	if not Game.can_double_gift():
+		_note = "Today's gift was already doubled."
+		rebuild()
 		return
 	if not Ads.can_offer("daily_gift"):
 		_note = "No ad is available right now, so the gift stays as it is."

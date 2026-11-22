@@ -11,7 +11,7 @@ static func publish(run: RunState) -> void:
 	var status := {}
 	if run != null and run.phase != RunState.Phase.LOST:
 		var show_name := str(RunScreen.SHOW_NAMES[clampi(run.show_index, 0, 2)])
-		status["continue"] = "Town %d · %s" % [run.town, show_name]
+		status["continue"] = "Town %d, %s" % [run.town, show_name]
 	status["found"] = Game.profile.jesters_found()
 	var text := JSON.stringify(JSON.stringify(status))
 	JavaScriptBridge.eval("try { localStorage.setItem('dof-status', %s) } catch (e) {}" % text, true)

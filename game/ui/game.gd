@@ -18,6 +18,9 @@ const RUN_PATH := "user://run.json"
 const RUN_META_PATH := "user://run_meta.json"
 const PROFILE_PATH := "user://profile.json"
 const SEED_LETTERS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+## run_meta keys that describe how a run was set up (they carry over to a restart);
+## everything else in run_meta is that run's own tally.
+const SETUP_KEYS := ["mode", "daily_date", "practice"]
 
 var profile := Profile.new()
 var run: RunState = null
@@ -77,6 +80,9 @@ func new_run(deck_id: String, stake: int, challenge_id := "", seed := "", meta :
 	var locked: Array = Unlocks.RARE_FEATS.keys() if meta.has("daily_date") else profile.locked_cards()
 	run = RunState.create(seed if seed != "" else _random_seed(), deck, stake, challenge_id, locked, str(meta.get("mode", "tour")))
 	run_meta = meta.duplicate()
+	# The player's very first run is the guided one (its Encore is free).
+	if Settings.tutorial_step >= 0 and profile.runs_played == 0 and not run_meta.has("daily_date"):
+		run_meta["guided_first"] = true
 	recorded = false
 	win_seen = false
 	_save_json(RUN_META_PATH, run_meta)
@@ -100,7 +106,10 @@ func continue_run() -> bool:
 
 func cloud_data() -> Dictionary:
 	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(RUN_PATH)) if has_saved_run() else null
-	return { "profile": profile.to_dict(), "run": saved, "run_meta": run_meta if saved != null else {} }
+	# The meta on disk belongs to the saved run (the in-memory one is empty on the menu
+	# after a launch until the run is continued).
+	var meta: Dictionary = (run_meta if run != null else _load_json(RUN_META_PATH)) if saved != null else {}
+	return { "profile": profile.to_dict(), "run": saved, "run_meta": meta }
 
 
 
@@ -109,9 +118,12 @@ func adopt_cloud(data: Dictionary) -> void:
 		profile = Profile.from_dict(data["profile"])
 		_save_json(PROFILE_PATH, profile.to_dict(), false)
 	run = null
+	run_meta = {}
 	if data.get("run") is Dictionary:
+		var adopted_meta: Variant = data.get("run_meta", {})
+		run_meta = (adopted_meta as Dictionary).duplicate(true) if adopted_meta is Dictionary else {}
 		_save_json(RUN_PATH, data["run"], false)
-		_save_json(RUN_META_PATH, data.get("run_meta", {}), false)
+		_save_json(RUN_META_PATH, run_meta, false)
 	elif FileAccess.file_exists(RUN_PATH):
 		DirAccess.remove_absolute(RUN_PATH)
 	changed.emit()
@@ -162,6 +174,9 @@ func _pay_coins(before_phase: int, before_show: int, before_town: int, before_wo
 		paid += coins + bonus
 	if run.won and not before_won:
 		var win := Economy.coins_for_run_win(run.mode, run.stake)
+		# Daily practice replays the same cards, so its win bonus pays half too.
+		if bool(run_meta.get("practice", false)):
+			win = maxi(1, roundi(win * Economy.PRACTICE_SHARE))
 		w.earn("coins", win)
 		run_meta["win_coins"] = win
 		run_meta["doublable"] = int(run_meta.get("doublable", 0)) + win
@@ -219,9 +234,10 @@ func encore_open() -> bool:
 	return run != null and run.can_encore() and not is_ranked_daily()
 
 
-## In the guided first run the Encore is free: it teaches the idea without an ad.
+## In the guided first run the Encore is free: it teaches the idea without an ad. Only
+## that run: new_run marks it, so "Guide me again" in Settings can't make Encores free.
 func encore_free() -> bool:
-	return Settings.tutorial_step >= 0
+	return bool(run_meta.get("guided_first", false))
 
 
 ## Take the Encore, paid with "ad" (the caller has already shown the rewarded ad),
@@ -297,9 +313,15 @@ func claim_gift() -> Dictionary:
 
 ## Pay a claimed gift's coins once more (after a rewarded ad). Only today's gift, only
 ## once, and only the coins: an ad never pays out diamonds.
+## Today's gift was claimed and hasn't been doubled yet.
+func can_double_gift() -> bool:
+	var w := wallet()
+	return w.gift_day == Economy.today() and w.gift_doubled_day != w.gift_day
+
+
 func double_gift(gift: Dictionary) -> bool:
 	var w := wallet()
-	if w.gift_day != Economy.today() or w.gift_doubled_day == w.gift_day:
+	if not can_double_gift():
 		return false
 	w.gift_doubled_day = w.gift_day
 	w.earn("coins", int(gift.get("coins", 0)))
@@ -322,14 +344,19 @@ func finish_run() -> void:
 		"deck": run.deck_id, "encores": run.encores(), "daily": run_meta.has("daily_date"),
 		"practice": bool(run_meta.get("practice", false)) })
 	var w := wallet()
-	# Finishing the daily run (ranked or practice) pays once a day.
-	if run_meta.has("daily_date") and w.daily_run_day < Economy.today():
+	# Finishing the daily run (ranked or practice) pays once a day, if it was played.
+	if run_meta.has("daily_date") and w.daily_run_day < Economy.today() and int(run.counters.get("hands_played", 0)) > 0:
 		w.daily_run_day = Economy.today()
 		w.earn("coins", Economy.DAILY_RUN_COINS)
 		run_meta["daily_coins"] = Economy.DAILY_RUN_COINS
 		run_meta["run_coins"] = int(run_meta.get("run_coins", 0)) + Economy.DAILY_RUN_COINS
-	# Every 25 Jesters found pays an album milestone.
-	var milestones := Economy.album_milestones(found_before, profile.jesters_found())
+	# Every 25 Jesters found pays an album milestone, once per wallet. A wallet that
+	# has never counted starts from the Jesters found before this run: the milestones
+	# before that were paid when they were reached.
+	if w.album_paid < 0:
+		w.album_paid = floori(found_before / float(Economy.ALBUM_STEP))
+	var milestones := maxi(0, floori(profile.jesters_found() / float(Economy.ALBUM_STEP)) - w.album_paid)
+	w.album_paid += milestones
 	if milestones > 0:
 		w.earn("coins", Economy.ALBUM_COINS * milestones)
 		w.earn("diamonds", Economy.ALBUM_DIAMONDS * milestones)
@@ -363,7 +390,11 @@ func restart() -> void:
 	var deck := run.deck_id
 	var stake := run.stake
 	var challenge := run.challenge
-	var meta := run_meta.duplicate()
+	# Only what sets the run up carries over; the last run's coin tally must not.
+	var meta := {}
+	for key: String in SETUP_KEYS:
+		if run_meta.has(key):
+			meta[key] = run_meta[key]
 	var seed := ""
 	if meta.has("daily_date"):
 		meta["practice"] = true

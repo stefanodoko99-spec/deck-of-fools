@@ -38,6 +38,14 @@ var show_coins_today := 0
 var first_win_day := ""
 ## The day the daily gift was last doubled (once a day).
 var gift_doubled_day := ""
+## Album milestones (every Economy.ALBUM_STEP Jesters) already paid into this wallet;
+## -1 until the wallet first counts them.
+var album_paid := -1
+## When the last intermission, rewarded ad and purchase happened (Unix seconds, -1 for
+## never), kept here so the spacing rules survive closing the app.
+var ad_last_intermission := -1.0
+var ad_last_rewarded := -1.0
+var ad_last_purchase := -1.0
 ## Ad counters for today (reset when the day changes), to keep ads rare.
 var ad_day := ""
 var rewarded_today := 0
@@ -138,6 +146,8 @@ func to_dict() -> Dictionary:
 		"diamonds_earned": diamonds_earned, "diamonds_spent": diamonds_spent,
 		"purchases": purchases.duplicate(true), "gift_day": gift_day, "gift_streak": gift_streak, "daily_run_day": daily_run_day,
 		"coin_day": coin_day, "show_coins_today": show_coins_today, "first_win_day": first_win_day, "gift_doubled_day": gift_doubled_day,
+		"album_paid": album_paid, "ad_last_intermission": ad_last_intermission, "ad_last_rewarded": ad_last_rewarded,
+		"ad_last_purchase": ad_last_purchase,
 		"ad_day": ad_day, "rewarded_today": rewarded_today, "intermissions_today": intermissions_today,
 	}
 
@@ -182,6 +192,10 @@ static func from_dict(d: Dictionary) -> Wallet:
 	w.show_coins_today = maxi(0, int(d.get("show_coins_today", 0)))
 	w.first_win_day = str(d.get("first_win_day", ""))
 	w.gift_doubled_day = str(d.get("gift_doubled_day", ""))
+	w.album_paid = maxi(-1, int(d.get("album_paid", -1)))
+	w.ad_last_intermission = float(d.get("ad_last_intermission", -1.0))
+	w.ad_last_rewarded = float(d.get("ad_last_rewarded", -1.0))
+	w.ad_last_purchase = float(d.get("ad_last_purchase", -1.0))
 	w.ad_day = str(d.get("ad_day", ""))
 	w.rewarded_today = maxi(0, int(d.get("rewarded_today", 0)))
 	w.intermissions_today = maxi(0, int(d.get("intermissions_today", 0)))

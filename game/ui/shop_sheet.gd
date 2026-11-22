@@ -126,6 +126,7 @@ func _build() -> void:
 	_show_status()
 	if Store.is_open():
 		var restore := _text_button("Restore purchases", _restore)
+		restore.custom_minimum_size = Vector2(0, 24)
 		restore.disabled = _store_busy != ""
 		foot.add_child(restore)
 	body.add_child(foot)
@@ -331,7 +332,8 @@ func _back_tile(index: int) -> Control:
 		where.custom_minimum_size = Vector2(0, 30)
 		tile.col.add_child(where)
 	else:
-		tile.col.add_child(_price(entry, 8, false))
+		# The short worth keeps a 300-diamond price inside the 83 px a back tile has.
+		tile.col.add_child(_price(entry, 8, false, true))
 		tile.col.add_child(_buy_button(entry, true))
 	return tile
 
@@ -702,14 +704,15 @@ func _art_for(entry: Dictionary, art_size: Vector2) -> Control:
 
 
 ## The price of an item in coins or diamonds; red when the wallet is short (on glass).
-func _price(entry: Dictionary, font_size: int, on_colour: bool) -> Control:
+func _price(entry: Dictionary, font_size: int, on_colour: bool, compact := false) -> Control:
 	var short := not Game.wallet().can_afford(str(entry["currency"]), int(entry["price"]))
 	var colour := UiTheme.TEXT if on_colour or not short else UiTheme.MULT.lightened(0.35)
 	var row := UiTheme.currency(str(entry["currency"]), int(entry["price"]), font_size, colour)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	# Diamond prices show what they are worth in money at the base rate (EU CPC rules).
 	if str(entry["currency"]) == "diamonds":
-		var worth := UiTheme.label("(" + ShopCatalog.money_value(int(entry["price"])) + ")", maxi(8, font_size - 3), UiTheme.TEXT if on_colour else UiTheme.MUTED)
+		var value := ShopCatalog.money_value_short(int(entry["price"])) if compact else "(" + ShopCatalog.money_value(int(entry["price"])) + ")"
+		var worth := UiTheme.label(value, maxi(8, font_size - 3), UiTheme.TEXT if on_colour else UiTheme.MUTED)
 		worth.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(worth)
 	return row
