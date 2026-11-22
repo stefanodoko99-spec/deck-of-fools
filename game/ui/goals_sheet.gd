@@ -1,31 +1,39 @@
 class_name GoalsSheet
 extends Sheet
-## The goals: today's three side by side as colour blocks (easy, medium, hard), this
-## week's goal as a banner under them, and any finished goals from earlier days waiting to
-## be claimed. Claiming plays the cash sound, bursts coins from the goal and counts the
-## wallet in the header up to its new balance. It opens only when the player asks
-## (Goals.open() from the home screen), never by itself.
+## The goals: the three daily goals side by side as colour blocks (easy, medium, hard),
+## the weekly goal as a banner under them, and, in the header, any finished goals from
+## earlier days waiting to be claimed. Claiming plays the cash sound, bursts coins from the
+## goal and counts the coins in the header up to their new balance. It opens only when the
+## player asks (Goals.open() from the home screen), never by itself.
 ##
-## Nothing here pushes: it says when the next goals come without a ticking clock,
-## unfinished goals simply make way for new ones, and finished ones wait as long as they
-## need to. Progress is told in numbers as well as bars, never by colour alone.
+## Nothing here pushes: goals wait until they are finished, so no clock runs against them;
+## only a claimed goal says when the next one comes. Progress is told in numbers as well as
+## bars, never by colour alone. The panel takes the height its content needs and stays
+## centred on the stage, so it fits at every text size.
 
-## Colour blocks for each pool, top-left to bottom-right. A finished goal turns gold.
+## Colour blocks for each pool, top-left to bottom-right: deep enough that the cream text
+## on them keeps 4.5:1 contrast everywhere, the tile's sheen included. A finished goal
+## turns gold (with dark ink).
 const COLOURS := {
-	"easy": [Color("27b5a2"), Color("0d5a70")],
-	"medium": [Color("4f8dff"), Color("2c30a3")],
-	"hard": [Color("ff5f73"), Color("9c1b3d")],
-	"weekly": [Color("a46cff"), Color("4a1fa8")],
+	"easy": [Color("00695a"), Color("003d52")],
+	"medium": [Color("1c57c4"), Color("27289b")],
+	"hard": [Color("c01c41"), Color("8a002f")],
+	"weekly": [Color("7739ca"), Color("4719a4")],
 }
 const READY := [Color("ffd66b"), Color("f0a020")]
+## The white sheen ShopSheet.Tile lays over the top of a tile, at its strongest.
+const SHEEN := 0.12
+const PANEL_WIDTH := 600.0
 const DAILY_HEIGHT := 148.0
 const WEEKLY_HEIGHT := 64.0
 const GAP := 8
+## Words on the colour blocks need at least this contrast (WCAG AA).
+const CONTRAST := 4.5
 
 var _coins: Label
-var _diamonds: Label
 var _shown_coins := -1
-var _shown_diamonds := -1
+## The header's place for the finished goals from earlier days.
+var _earlier_slot: HBoxContainer
 ## The goal just claimed: once the sheet is rebuilt, its reward counts up.
 var _claimed_id := ""
 var _claimed_coins := 0
@@ -34,13 +42,8 @@ var _reward_label: Label
 
 func _init() -> void:
 	title_text = "Goals"
-	# Taller when finished goals from earlier days wait in a bar at the bottom.
-	panel_size = Vector2(600, 336 if not Goals.earlier().is_empty() else 318)
-
-
-func _ready() -> void:
-	super._ready()
-	_add_wallet()
+	# No height: the panel hugs its content (see _hug).
+	panel_size = Vector2(PANEL_WIDTH, 0)
 
 
 ## How long until something comes, in words without seconds ("5 h", "40 min", "3 days"):
@@ -78,39 +81,41 @@ static func share(g: Dictionary) -> float:
 
 
 func _build() -> void:
+	_hug()
+	_header()
 	_reward_label = null
 	var now := int(Time.get_unix_time_from_system())
 	var goals := Goals.current()
-	body.add_child(_section("Today", "New goals in " + until(GoalDefs.seconds_to_next_day(now))))
+	body.add_child(_section("Today", "Any mode counts. Goals wait until you finish them."))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", GAP)
 	for g: Dictionary in goals:
 		if g["kind"] == "daily":
-			row.add_child(_daily_tile(g))
+			row.add_child(_daily_tile(g, now))
 	body.add_child(row)
 	for g: Dictionary in goals:
 		if g["kind"] == "weekly":
 			body.add_child(_weekly_tile(g, now))
-	# Whatever comes last sits at the bottom of the sheet.
-	var gap := Control.new()
-	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	body.add_child(gap)
-	var waiting := Goals.earlier()
-	if waiting.is_empty():
-		var foot := UiTheme.label("Goals fill up as you play, in any mode. Finished goals wait for you to claim them.", 8, UiTheme.MUTED)
-		foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		foot.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		foot.custom_minimum_size = Vector2(panel_size.x - 40.0, 0)
-		body.add_child(foot)
-	else:
-		body.add_child(_earlier_bar(waiting))
+	_show_earlier(Goals.earlier())
 	if _reward_label != null:
 		_roll(_reward_label, _claimed_coins)
 	_claimed_id = ""
 
 
-## A heading with a note on the right ("Today ... New goals in 5 h").
+## The panel takes the height its content needs, growing up and down alike from the middle
+## of the stage (and sideways from its middle too), so it stays centred whatever the text
+## size and the goals on it. Set once, before Sheet slides the panel in from below.
+func _hug() -> void:
+	var panel := body.get_parent().get_parent() as Control
+	if panel.grow_vertical == Control.GROW_DIRECTION_BOTH:
+		return
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	panel.offset_top = UiTheme.STAGE.y / 2.0
+	panel.offset_bottom = UiTheme.STAGE.y / 2.0
+
+
+## A heading with a note on the right ("Today ... Any mode counts.").
 func _section(text: String, note: String) -> Control:
 	var row := HBoxContainer.new()
 	var caption := UiTheme.label(text, 11, UiTheme.TEXT)
@@ -123,16 +128,17 @@ func _section(text: String, note: String) -> Control:
 	return row
 
 
-## One of today's goals: its picture and reward, what to do, a line on how, and then its
-## progress, a Claim button, or a tick once claimed.
-func _daily_tile(g: Dictionary) -> Control:
+## One of the daily goals: its picture and reward, what to do, a line on how, and then its
+## progress, a Claim button, or a tick once claimed (with when the next goal comes).
+func _daily_tile(g: Dictionary, now: int) -> Control:
 	var ready_now: bool = g["done"] and not g["claimed"]
 	var ink := UiTheme.INK if ready_now else UiTheme.TEXT
 	var tile := ShopSheet.Tile.new(_colours(g), 9.0)
 	tile.custom_minimum_size = Vector2(0, DAILY_HEIGHT)
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tile.col.add_theme_constant_override("separation", 4)
-	var width := (panel_size.x - 28.0 - 2.0 * GAP) / 3.0 - 18.0
+	# Whole pixels, so three tiles and their gaps never come out wider than the panel.
+	var width := floorf((PANEL_WIDTH - 28.0 - 2.0 * GAP) / 3.0) - 18.0
 	var top := HBoxContainer.new()
 	top.add_child(GoalArt.new(str(g["art"]), ink, 36.0, int(g["target"])))
 	var space := Control.new()
@@ -141,16 +147,17 @@ func _daily_tile(g: Dictionary) -> Control:
 	top.add_child(_reward(g, ink))
 	tile.col.add_child(top)
 	tile.col.add_child(_words(str(g["text"]), 11, ink, width, true))
-	tile.col.add_child(_words(str(g["hint"]), 8, Color(ink, 0.8), width))
+	if str(g["hint"]) != "":
+		tile.col.add_child(_words(str(g["hint"]), 8, ink, width))
 	var gap := Control.new()
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	tile.col.add_child(gap)
-	tile.col.add_child(_state_row(g, tile, ink))
+	tile.col.add_child(_state_row(g, tile, ink, GoalDefs.seconds_to_next_day(now)))
 	_settle(tile, g)
 	return tile
 
 
-## This week's goal: a banner with the picture, the words, the reward and the progress.
+## The weekly goal: a banner with the picture, the words, the reward and the progress.
 func _weekly_tile(g: Dictionary, now: int) -> Control:
 	var ready_now: bool = g["done"] and not g["claimed"]
 	var ink := UiTheme.INK if ready_now else UiTheme.TEXT
@@ -164,16 +171,10 @@ func _weekly_tile(g: Dictionary, now: int) -> Control:
 	words.add_theme_constant_override("separation", 1)
 	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	words.alignment = BoxContainer.ALIGNMENT_CENTER
-	var tags := HBoxContainer.new()
-	tags.add_theme_constant_override("separation", 6)
-	tags.add_child(_tag("This week", ink))
-	var next := _words("New weekly goal in " + until(GoalDefs.seconds_to_next_week(now)), 8, Color(ink, 0.8), 0.0)
-	next.autowrap_mode = TextServer.AUTOWRAP_OFF
-	next.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	tags.add_child(next)
-	words.add_child(tags)
+	words.add_child(_tag("Weekly goal", ink))
 	words.add_child(_words(str(g["text"]), 12, ink, 250.0, true))
-	words.add_child(_words(str(g["hint"]), 8, Color(ink, 0.8), 250.0))
+	if str(g["hint"]) != "":
+		words.add_child(_words(str(g["hint"]), 8, ink, 250.0))
 	row.add_child(words)
 	var side := VBoxContainer.new()
 	side.custom_minimum_size = Vector2(156, 0)
@@ -182,52 +183,54 @@ func _weekly_tile(g: Dictionary, now: int) -> Control:
 	var reward := _reward(g, ink)
 	reward.size_flags_horizontal = Control.SIZE_SHRINK_END
 	side.add_child(reward)
-	side.add_child(_state_row(g, tile, ink))
+	side.add_child(_state_row(g, tile, ink, GoalDefs.seconds_to_next_week(now)))
 	row.add_child(side)
 	_settle(tile, g)
 	return tile
 
 
-## Finished goals from earlier days, all claimed with one tap.
-func _earlier_bar(waiting: Array) -> Control:
+## The finished goals from earlier days, in the header: how many, what they pay, and one
+## Claim for them all. Nothing shows when none wait.
+func _show_earlier(waiting: Array) -> void:
+	for child: Node in _earlier_slot.get_children():
+		_earlier_slot.remove_child(child)
+		child.queue_free()
+	if waiting.is_empty():
+		return
 	var coins := 0
-	var gems := 0
 	for g: Dictionary in waiting:
 		coins += int(g["coins"])
-		gems += int(g["diamonds"])
-	var panel := PanelContainer.new()
-	var box := UiTheme.box(Color(1, 1, 1, 0.08), UiTheme.TONAL_EDGE, 12)
-	box.content_margin_left = 10
-	box.content_margin_right = 6
-	box.content_margin_top = 4
-	box.content_margin_bottom = 4
-	panel.add_theme_stylebox_override("panel", box)
+	var pill := PanelContainer.new()
+	var box := UiTheme.box(Color(1, 1, 1, 0.08), UiTheme.TONAL_EDGE, 99)
+	box.content_margin_left = 8
+	box.content_margin_right = 2
+	box.content_margin_top = 1
+	box.content_margin_bottom = 1
+	pill.add_theme_stylebox_override("panel", box)
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	panel.add_child(row)
-	var tick := ShopSheet.Check.new(14.0)
+	row.add_theme_constant_override("separation", 6)
+	pill.add_child(row)
+	var tick := ShopSheet.Check.new(13.0)
 	tick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(tick)
 	var n := waiting.size()
-	var text := "A goal you finished earlier is waiting" if n == 1 else "%d goals you finished earlier are waiting" % n
-	var words := UiTheme.label(text, 9, UiTheme.TEXT)
-	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var words := UiTheme.label("1 goal from earlier" if n == 1 else "%d goals from earlier" % n, 9, UiTheme.TEXT)
 	words.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	words.clip_text = true
-	words.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(words)
-	row.add_child(UiTheme.currency("coins", coins, 10))
-	if gems > 0:
-		row.add_child(UiTheme.currency("diamonds", gems, 10))
-	var claim := UiTheme.button("Claim", _claim_earlier.bind(panel), 10, UiTheme.GOLD)
-	claim.custom_minimum_size = Vector2(72, 22)
+	var amount := UiTheme.currency("coins", coins, 10)
+	amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(amount)
+	var claim := UiTheme.button("Claim", _claim_earlier.bind(pill), 10, UiTheme.GOLD)
+	claim.custom_minimum_size = Vector2(60, 24)
 	row.add_child(claim)
-	return panel
+	_earlier_slot.add_child(pill)
 
 
-## The bottom of a goal: a Claim button when it's finished, a tick once claimed, and
-## otherwise its bar and its progress in numbers.
-func _state_row(g: Dictionary, tile: Control, ink: Color) -> Control:
+## The bottom of a goal: a Claim button when it's finished, a tick once claimed (and when
+## the next goal comes in its place, `next` seconds from now), and otherwise its bar and
+## its progress in numbers.
+func _state_row(g: Dictionary, tile: Control, ink: Color, next: int) -> Control:
 	if g["claimed"]:
 		var done_row := HBoxContainer.new()
 		done_row.add_theme_constant_override("separation", 5)
@@ -235,6 +238,10 @@ func _state_row(g: Dictionary, tile: Control, ink: Color) -> Control:
 		var claimed := UiTheme.label("Claimed", 9, ink)
 		claimed.add_theme_font_override("font", UiTheme.bold)
 		done_row.add_child(claimed)
+		var when := UiTheme.label("Next in " + until(next), 9, UiTheme.MUTED)
+		when.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		when.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		done_row.add_child(when)
 		return done_row
 	if g["done"]:
 		var claim := UiTheme.button("Claim", _claim.bind(str(g["id"]), tile), 11, UiTheme.TEXT)
@@ -251,10 +258,11 @@ func _state_row(g: Dictionary, tile: Control, ink: Color) -> Control:
 	return row
 
 
-## The coins (and diamonds) a goal pays, as a small pill.
+## The coins a goal pays, as a small pill (darker than the tile, so the words keep their
+## contrast).
 func _reward(g: Dictionary, ink: Color) -> Control:
 	var pill := PanelContainer.new()
-	var box := UiTheme.box(Color(ink, 0.16) if ink == UiTheme.INK else Color(1, 1, 1, 0.2), Color(0, 0, 0, 0), 99)
+	var box := UiTheme.box(Color(ink, 0.16) if ink == UiTheme.INK else Color(0, 0, 0, 0.24), Color(0, 0, 0, 0), 99)
 	box.content_margin_left = 6
 	box.content_margin_right = 7
 	box.content_margin_top = 1
@@ -266,8 +274,6 @@ func _reward(g: Dictionary, ink: Color) -> Control:
 	pill.add_child(row)
 	var coins := UiTheme.currency("coins", int(g["coins"]), 10, ink)
 	row.add_child(coins)
-	if int(g["diamonds"]) > 0:
-		row.add_child(UiTheme.currency("diamonds", int(g["diamonds"]), 10, ink))
 	var amount := coins.get_child(1) as Label
 	amount.text = "+" + amount.text
 	if ink == UiTheme.INK:
@@ -310,13 +316,13 @@ func _claim(id: String, tile: Control) -> void:
 	_refresh_wallet(true)
 
 
-func _claim_earlier(bar: Control) -> void:
-	var at := bar.get_global_rect().get_center() if is_instance_valid(bar) else Vector2.ZERO
+func _claim_earlier(pill: Control) -> void:
+	var at := pill.get_global_rect().get_center() if is_instance_valid(pill) else Vector2.ZERO
 	var paid := Goals.claim_earlier()
-	if int(paid["coins"]) <= 0 and int(paid["diamonds"]) <= 0:
+	if paid <= 0:
 		rebuild()
 		return
-	_celebrate(at, int(paid["coins"]))
+	_celebrate(at, paid)
 	rebuild()
 	_refresh_wallet(true)
 
@@ -368,7 +374,7 @@ func _words(text: String, font_size: int, colour: Color, width: float, heavy := 
 ## A small pill label on a tile.
 func _tag(text: String, ink: Color) -> PanelContainer:
 	var pill := PanelContainer.new()
-	var box := UiTheme.box(Color(ink, 0.18) if ink == UiTheme.INK else Color(1, 1, 1, 0.22), Color(0, 0, 0, 0), 99)
+	var box := UiTheme.box(Color(ink, 0.18) if ink == UiTheme.INK else Color(0, 0, 0, 0.24), Color(0, 0, 0, 0), 99)
 	box.content_margin_left = 7
 	box.content_margin_right = 7
 	box.content_margin_top = 0
@@ -383,10 +389,19 @@ func _tag(text: String, ink: Color) -> PanelContainer:
 	return pill
 
 
-# --- The wallet in the header ----------------------------------------------------
+# --- The header: earlier goals and the coins ------------------------------------
 
 
-func _add_wallet() -> void:
+## Once: after the title, a place for the earlier goals, then the coins goals pay into
+## (goals pay coins only, so the diamonds stay out of this sheet).
+func _header() -> void:
+	if _earlier_slot != null:
+		return
+	var top := heading.get_parent()
+	_earlier_slot = HBoxContainer.new()
+	_earlier_slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(_earlier_slot)
+	top.move_child(_earlier_slot, heading.get_index() + 1)
 	var pill := PanelContainer.new()
 	var box := UiTheme.box(Color(0, 0, 0, 0.32), UiTheme.TONAL_EDGE, 99)
 	box.content_margin_left = 10
@@ -395,18 +410,11 @@ func _add_wallet() -> void:
 	box.content_margin_bottom = 3
 	pill.add_theme_stylebox_override("panel", box)
 	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	pill.add_child(row)
 	var coins := UiTheme.currency("coins", 0, 11)
-	var gems := UiTheme.currency("diamonds", 0, 11)
-	row.add_child(coins)
-	row.add_child(gems)
+	pill.add_child(coins)
 	_coins = coins.get_child(1) as Label
-	_diamonds = gems.get_child(1) as Label
-	var top := heading.get_parent()
 	top.add_child(pill)
-	top.move_child(pill, heading.get_index() + 1)
+	top.move_child(pill, _earlier_slot.get_index() + 1)
 	var space := Control.new()
 	space.custom_minimum_size = Vector2(4, 0)
 	top.add_child(space)
@@ -414,13 +422,11 @@ func _add_wallet() -> void:
 	_refresh_wallet(false)
 
 
-## Show the wallet's balances, counting to them from what was shown before.
+## Show the coins, counting to the balance from what was shown before.
 func _refresh_wallet(animate := true) -> void:
 	var w := Goals.wallet_in_use()
 	_count(_coins, _shown_coins, w.coins, animate)
-	_count(_diamonds, _shown_diamonds, w.diamonds, animate)
 	_shown_coins = w.coins
-	_shown_diamonds = w.diamonds
 
 
 func _count(label: Label, from: int, to: int, animate: bool) -> void:

@@ -6,14 +6,18 @@ extends RefCounted
 ##
 ## Every goal teaches a part of the game (a poker hand, discards, Jesters, Signs, the
 ## Patrons, travelling on), so a day's three goals are a small lesson plan: one easy,
-## one medium and one hard, each from its own pool. A pool is dealt in a shuffled order
-## that changes every round, so a goal comes back only after all the others in its pool
-## had their turn, and never two days running. Goals only ever watch play: nothing in a
-## run changes because of them, and any mode counts, daily practice included.
+## one medium and one hard, each from its own pool. No goal finishes a goal of another
+## pool along the way (one 5,000-point hand would also score 1,000, and reaching Town 3
+## means beating a Patron), so the three are always three different things to do, also
+## when an unfinished goal from an earlier day is still waiting next to new ones. A pool
+## is dealt in a shuffled order that changes every round, so a goal comes back only after
+## all the others in its pool had their turn, and never two days running. Goals only ever
+## watch play: nothing in a run changes because of them, and any mode counts, daily
+## practice included.
 
-## A weekly goal pays this many coins and diamonds (daily goals pay their own coins).
+## A weekly goal pays this many coins (daily goals pay their own). Goals pay coins only:
+## diamonds come from the daily gift and the album milestones (docs/MONETIZATION.md).
 const WEEKLY_COINS := 100
-const WEEKLY_DIAMONDS := 10
 ## A day's goals come one from each of these pools, in this order.
 const DAILY_TIERS := ["easy", "medium", "hard"]
 const WEEKLY_TIER := "weekly"
@@ -21,9 +25,11 @@ const WEEKLY_TIER := "weekly"
 ## The run events that say which town the run is in (for "Reach Town N").
 const TOWN_EVENTS := ["hand_played", "discarded", "show_won", "show_lost", "run_finished"]
 
-## The poker hands each played hand contains, read the way the Jesters' "if the hand
-## contains" reads it (HandEvaluator), for five ordinary cards. A Full House counts for
-## "Three of a Kind" and a Straight Flush for "Flush", as a player would expect.
+## The poker hands each played hand contains, for five ordinary cards, read the way the
+## Jesters' "if the hand contains" reads it (HandEvaluator): a Full House counts for "Three
+## of a Kind" and a Straight Flush for "Flush", as a player would expect. Only a fallback:
+## when a hand_played event brings the scorer's own "contains" (which also knows a Flush of
+## four cards with a Pair beside it, or copied cards), that is what counts.
 const CONTAINS := {
 	"high_card": ["high_card"],
 	"pair": ["pair"],
@@ -45,7 +51,7 @@ const CONTAINS := {
 ##   text     what to do; {deck} is the deck the day picked (today's daily-run deck)
 ##   hint     one line that teaches how
 ##   target   how far the progress has to go
-##   coins    the reward of a daily goal (weekly ones pay WEEKLY_COINS and WEEKLY_DIAMONDS)
+##   coins    the reward of a daily goal (weekly ones pay WEEKLY_COINS)
 ##   on       the Game.run_event kinds that can move it ("*" for any)
 ##   rule     what the event has to show: "contains" a poker hand, a field equal to a
 ##            value, or "field>=" / "field<=" a value; "@deck" stands for the day's deck
@@ -53,7 +59,8 @@ const CONTAINS := {
 ##            keeps the highest value seen
 ##   art      the picture on the goal's tile (GoalsSheet.GoalArt)
 ## Hand goals ask for "total>=": 1, so a hand the Patron doesn't allow (it scores
-## nothing) doesn't count.
+## nothing) doesn't count. Ids no longer dealt (patron, hand_1000, signs_3: each was
+## finished along the way by a goal of a harder pool) stay retired, never reused.
 const POOL := [
 	# Easy: a few minutes of any run.
 	{ "id": "pairs_5", "tier": "easy", "text": "Play 5 hands with a Pair",
@@ -69,7 +76,7 @@ const POOL := [
 		"hint": "The second show in each town: its target is 1.5 times the Matinee's.",
 		"target": 1, "coins": 35, "on": ["show_won"], "rule": { "show": 1 }, "measure": "count", "art": "moon" },
 	{ "id": "jesters_2", "tier": "easy", "text": "Buy 2 Jesters",
-		"hint": "Jesters from the Market work on every hand you play.",
+		"hint": "Jesters from the Market keep working for the rest of the run.",
 		"target": 2, "coins": 40, "on": ["jester_bought"], "rule": {}, "measure": "count", "art": "jester" },
 	{ "id": "spare_discard", "tier": "easy", "text": "Win a show with a discard to spare",
 		"hint": "Brighella pays a ducat for every discard you don't use.",
@@ -85,12 +92,6 @@ const POOL := [
 	{ "id": "three_kind_2", "tier": "medium", "text": "Play 2 hands with Three of a Kind",
 		"hint": "Three cards of the same rank. A Full House counts too.",
 		"target": 2, "coins": 50, "on": ["hand_played"], "rule": { "contains": "three_kind", "total>=": 1 }, "measure": "count", "art": "three" },
-	{ "id": "patron", "tier": "medium", "text": "Beat a Patron",
-		"hint": "The last show in each town. Every Patron brings a rule of their own.",
-		"target": 1, "coins": 55, "on": ["show_won"], "rule": { "show": 2 }, "measure": "count", "art": "crown" },
-	{ "id": "hand_1000", "tier": "medium", "text": "Score 1,000 with one hand",
-		"hint": "A hand scores its Points times its Mult: raise both.",
-		"target": 1000, "coins": 50, "on": ["hand_played"], "rule": {}, "measure": "best:total", "art": "score" },
 	{ "id": "sign", "tier": "medium", "text": "Use a Sign",
 		"hint": "A Sign levels up a poker hand for the rest of the run.",
 		"target": 1, "coins": 45, "on": ["*"], "rule": {}, "measure": "sum:signs", "art": "star" },
@@ -109,14 +110,11 @@ const POOL := [
 		"hint": "Three of a Kind and a Pair in the same hand.",
 		"target": 1, "coins": 70, "on": ["hand_played"], "rule": { "contains": "full_house", "total>=": 1 }, "measure": "count", "art": "house" },
 	{ "id": "hand_5000", "tier": "hard", "text": "Score 5,000 with one hand",
-		"hint": "Level up your favourite hand with its Sign, then add Mult.",
+		"hint": "A hand scores its Points times its Mult: level it up, then add Mult.",
 		"target": 5000, "coins": 75, "on": ["hand_played"], "rule": {}, "measure": "best:total", "art": "score" },
 	{ "id": "patron_spare", "tier": "hard", "text": "Beat a Patron with 2 hands to spare",
-		"hint": "Every hand you don't need pays a ducat at cash-out.",
+		"hint": "Each town ends with its Patron. Hands you don't need pay a ducat each.",
 		"target": 1, "coins": 75, "on": ["show_won"], "rule": { "show": 2, "hands_left>=": 2 }, "measure": "count", "art": "crown" },
-	{ "id": "signs_3", "tier": "hard", "text": "Use 3 Signs",
-		"hint": "Signs turn up in the Market and in its packs.",
-		"target": 3, "coins": 65, "on": ["*"], "rule": {}, "measure": "sum:signs", "art": "star" },
 
 	# Weekly: something to work toward over a few sessions.
 	{ "id": "week_shows_20", "tier": "weekly", "text": "Win 20 shows",
@@ -172,11 +170,11 @@ static func weekly_for(date: String) -> String:
 	return _dealt(WEEKLY_TIER, week_number(date))
 
 
-## What a goal pays: { coins, diamonds }.
-static func reward(g: Dictionary) -> Dictionary:
+## The coins a goal pays.
+static func reward(g: Dictionary) -> int:
 	if str(g.get("tier", "")) == WEEKLY_TIER:
-		return { "coins": WEEKLY_COINS, "diamonds": WEEKLY_DIAMONDS }
-	return { "coins": int(g.get("coins", 0)), "diamonds": 0 }
+		return WEEKLY_COINS
+	return int(g.get("coins", 0))
 
 
 ## A goal's words, with the day's deck filled in.
@@ -188,9 +186,11 @@ static func text_for(g: Dictionary, params: Dictionary) -> String:
 
 
 ## The progress a goal has after one run event: the event is checked against the goal's
-## rule, then counted, summed or kept as the best so far, and capped at the target.
-## `facts` is the event's data plus what the tracker adds (reach, deck, signs).
-static func advance(g: Dictionary, progress: int, kind: String, facts: Dictionary, params := {}) -> int:
+## rule, then counted, summed or kept as the best so far, and capped at `cap`, the target
+## the player's goal was dealt with (an update may since have changed the goal's own), or
+## at the goal's own target when `cap` is 0. `facts` is the event's data plus what the
+## tracker adds (reach, deck, signs).
+static func advance(g: Dictionary, progress: int, kind: String, facts: Dictionary, params := {}, cap := 0) -> int:
 	var on: Array = g.get("on", [])
 	if not (on.has(kind) or on.has("*")) or not matches(g.get("rule", {}), facts, params):
 		return progress
@@ -200,7 +200,7 @@ static func advance(g: Dictionary, progress: int, kind: String, facts: Dictionar
 		value = progress + maxi(0, int(facts.get(measure.substr(4), 0)))
 	elif measure.begins_with("best:"):
 		value = maxi(progress, int(facts.get(measure.substr(5), 0)))
-	return clampi(value, 0, int(g.get("target", 1)))
+	return clampi(value, 0, cap if cap > 0 else maxi(1, int(g.get("target", 1))))
 
 
 ## Whether an event's facts meet a goal's rule (see POOL).
@@ -210,8 +210,7 @@ static func matches(rule: Dictionary, facts: Dictionary, params := {}) -> bool:
 		if want is String and (want as String).begins_with("@"):
 			want = params.get((want as String).substr(1), "")
 		if key == "contains":
-			var inside: Variant = CONTAINS.get(str(facts.get("hand", "")), [])
-			if not (inside as Array).has(want):
+			if not contains(facts, str(want)):
 				return false
 		elif key.ends_with(">=") or key.ends_with("<="):
 			var field := key.left(-2)
@@ -223,6 +222,17 @@ static func matches(rule: Dictionary, facts: Dictionary, params := {}) -> bool:
 		elif not _same(facts.get(key), want):
 			return false
 	return true
+
+
+## Whether a played hand contains a poker hand: the scorer's own answer when the event
+## brings one (a Dictionary of hand: true, or a list of hands), else the CONTAINS table.
+static func contains(facts: Dictionary, hand: String) -> bool:
+	var told: Variant = facts.get("contains")
+	if told is Dictionary:
+		return bool((told as Dictionary).get(hand, false))
+	if told is Array:
+		return (told as Array).has(hand)
+	return (CONTAINS.get(str(facts.get("hand", "")), []) as Array).has(hand)
 
 
 ## Days since 1 January 1970 (UTC) for a YYYY-MM-DD date.
@@ -258,6 +268,19 @@ static func seconds_to_next_week(unix: int) -> int:
 	var days := floori(unix / 86400.0)
 	var monday_based := posmod(days + 3, 7)
 	return (days - monday_based + 7) * 86400 - unix
+
+
+## The goal a pool deals on day (or week) `n` to a player still holding the goals in
+## `held`: unfinished goals wait for the player, and the one that just made way counts as
+## held too, so it doesn't come straight back. That is the day's own goal (daily_for,
+## weekly_for), unless it is held; then the first goal the following days deal that isn't.
+## The same for every player holding the same goals.
+static func pick(tier: String, n: int, held: Array) -> String:
+	for k in ids(tier).size() * 2:
+		var id := _dealt(tier, n + k)
+		if not held.has(id):
+			return id
+	return _dealt(tier, n)
 
 
 ## The goal a pool deals on day (or week) `n`. Each round of a pool (as many days as it

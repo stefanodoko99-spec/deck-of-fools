@@ -2,7 +2,8 @@ class_name Tips
 extends RefCounted
 ## Tips at the right moment: one short insight about a run that just lost a show, and a
 ## Jester of the day for the home screen. Both are quiet lines a screen may show in its
-## own layout, never pop-ups (docs/ROADMAP.md: no pop-ups after a loss).
+## own layout, never pop-ups (docs/ROADMAP.md: no pop-ups after a loss); insight_line()
+## gives the insight ready to add to the lost-show screen.
 ##
 ## The insight looks at what the run actually did and says the most useful thing, in this
 ## order: a Sign still held for a hand the player has been playing, discards left unused
@@ -21,8 +22,17 @@ const PLURALS := {
 	"straight_flush": "Straight Flushes", "five_kind": "Five of a Kind", "flush_house": "Flush Houses",
 	"flush_five": "Flush Fives",
 }
-## One day in this many, the Jester of the day is one with illustrated art (when any has).
+## At most one day in this many, the Jester of the day is one with illustrated art (when
+## any has)...
 const ILLUSTRATED_EVERY := 3
+## ...and further apart while only a few Jesters have art, so each one's turn comes round
+## no more often than every this many days.
+const ILLUSTRATED_GAP := 14
+## The hooks the scorer runs while a hand's Points and Mult are counted (core/scorer.gd).
+## A Jester boosts a hand only with one of these: one that only changes the cards after
+## scoring (La Ruffiana) or makes the hand easier to make (Il Pittore) doesn't.
+const SCORING_HOOKS := ["after_base", "card_scored", "card_held", "retrigger_scored", "retrigger_held",
+	"independent", "scored", "before_total"]
 
 ## Every Jester id in sorted order, and the illustrated ones, worked out once (looking for
 ## art files 150 times on every call would be slow); `_cast_size` notes the count of
@@ -30,6 +40,8 @@ const ILLUSTRATED_EVERY := 3
 static var _cast: Array[String] = []
 static var _illustrated: Array[String] = []
 static var _cast_size := -1
+## The walk's recent rounds (round number: order), so a day costs no shuffles once seen.
+static var _rounds: Dictionary = {}
 
 
 ## One short insight about the run that just lost a show, or "" when there's nothing
@@ -65,8 +77,21 @@ static func insight_after_loss(run: RunState, profile: Profile = null) -> String
 			return "%s The %s Sign levels it up: look for it in the Market." % [played, UiTheme.name_of(its_sign)]
 	# Shows were won (so the Market was open), yet no Jester ever joined.
 	if run.zanni.is_empty() and int(run.counters.get("shows_won", 0)) > 0:
-		return "You had no Jesters. Buy one in the Market after a show: each works on every hand."
+		return "You had no Jesters. Buy one in the Market after a show: it keeps working for the rest of the run."
 	return ""
+
+
+## The insight as a quiet line for the lost-show screen, wrapped to `width`, or null when
+## there's nothing specific to say (the screen then shows nothing).
+static func insight_line(run: RunState, width: float, profile: Profile = null) -> Label:
+	var text := insight_after_loss(run, profile)
+	if text == "":
+		return null
+	var line := UiTheme.label(text, 9, UiTheme.MUTED)
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.custom_minimum_size = Vector2(width, 0)
+	return line
 
 
 ## The poker hand the run played most (at least FAVOURITE_AT times), or "". Ties go to the
@@ -81,10 +106,11 @@ static func favourite_hand(run: RunState) -> String:
 	return best
 
 
-## The Jesters whose card text names a poker hand, best suggestions first: ones the player
-## has met before the rest, then the commoner ones (easier to find in the Market), then in
-## collection order. With a run, Jesters it holds or keeps out of its Market are left out.
-## A longer hand's name doesn't count for a shorter one ("Two Pair" isn't "Pair").
+## The Jesters that boost a poker hand: their card text names it and they add to a hand's
+## score (SCORING_HOOKS). Best suggestions first: ones the player has met before the rest,
+## then the commoner ones (easier to find in the Market), then in collection order. With a
+## run, Jesters it holds or keeps out of its Market are left out. A longer hand's name
+## doesn't count for a shorter one ("Two Pair" isn't "Pair").
 static func boosters(hand: String, player: Profile, run: RunState = null) -> Array[String]:
 	var wanted := hand_name(hand)
 	var longer: Array[String] = []
@@ -100,7 +126,7 @@ static func boosters(hand: String, player: Profile, run: RunState = null) -> Arr
 	var order := {}
 	for d: ContentDef in ContentDB.pool("zanni"):
 		order[d.id] = order.size()
-		if held.has(d.id) or (run != null and run.locked.has(d.id)):
+		if held.has(d.id) or (run != null and run.locked.has(d.id)) or not SCORING_HOOKS.any(d.has_hook):
 			continue
 		var text := UiTheme.text_of(d.id)
 		for other_name: String in longer:
@@ -120,27 +146,84 @@ static func boosters(hand: String, player: Profile, run: RunState = null) -> Arr
 	return out
 
 
-## Today's spotlight Jester (a def id), the same for everyone on a given UTC day. One day
-## in ILLUSTRATED_EVERY it is one of the Jesters with illustrated art, in turn; the other
-## days walk through every Jester in an order shuffled once a round, so each one has its
-## day before any comes back. `date` (YYYY-MM-DD) is for tests; "" means today.
+## Today's spotlight Jester (a def id), the same for everyone on a given UTC day. Now and
+## then (see illustrated_every) it is one of the Jesters with illustrated art, in turn; the
+## other days walk through every Jester in an order shuffled once a round, so each one has
+## its day before any comes back. `date` (YYYY-MM-DD) is for tests; "" means today.
 static func jester_of_the_day(date := "") -> String:
-	var jesters := ContentDB.pool("zanni")
-	if jesters.size() != _cast_size:
-		_cast_size = jesters.size()
-		_cast.clear()
-		for d: ContentDef in jesters:
-			_cast.append(d.id)
-		_cast.sort()
-		_illustrated.assign(_cast.filter(func(id: String) -> bool: return CardView.art_for("zanni", id) != null))
+	_load_cast()
 	if _cast.is_empty():
 		return ""
 	var day := GoalDefs.day_number(date if date != "" else Economy.today())
-	if not _illustrated.is_empty() and posmod(day, ILLUSTRATED_EVERY) == 0:
-		return _illustrated[posmod(floori(day / float(ILLUSTRATED_EVERY)), _illustrated.size())]
+	var every := _every()
+	if every == 0 or posmod(day, every) != 0:
+		return _walked(day, every)
+	# The illustrated Jesters take turns; one the days either side already spotlight
+	# waits for its next turn.
+	var turn := floori(day / float(every))
+	var around := [_walked(day - 1, every), _walked(day + 1, every)]
+	for k in _illustrated.size():
+		var id := _illustrated[posmod(turn + k, _illustrated.size())]
+		if not around.has(id):
+			return id
+	return _illustrated[posmod(turn, _illustrated.size())]
+
+
+## Every how many days an illustrated Jester has the spotlight (0 when none has art):
+## every ILLUSTRATED_EVERY days, or less often while so few have art that each would be
+## back within ILLUSTRATED_GAP days.
+static func illustrated_every() -> int:
+	_load_cast()
+	return _every()
+
+
+static func _every() -> int:
+	if _illustrated.is_empty():
+		return 0
+	return maxi(ILLUSTRATED_EVERY, ceili(ILLUSTRATED_GAP / float(_illustrated.size())))
+
+
+## The walk's Jester on a day that isn't an illustrated one. The walk counts only those
+## days, so it never skips a place in its order (`every` 0: every day is a walk day).
+static func _walked(day: int, every: int) -> String:
+	var walk := day if every == 0 else day - floori(day / float(every)) - 1
+	return _cast[int(_walk_order(floori(walk / float(_cast.size())))[posmod(walk, _cast.size())])]
+
+
+static func _load_cast() -> void:
+	var jesters := ContentDB.pool("zanni")
+	if jesters.size() == _cast_size:
+		return
+	_cast_size = jesters.size()
+	_rounds.clear()
+	_cast.clear()
+	for d: ContentDef in jesters:
+		_cast.append(d.id)
+	_cast.sort()
+	_illustrated.assign(_cast.filter(func(id: String) -> bool: return CardView.art_for("zanni", id) != null))
+
+
+## A round of the walk: every Jester once, shuffled from the round number. When it would
+## open with the Jester the round before ended on, its first two swap, so no Jester has two
+## days running.
+static func _walk_order(round_no: int) -> Array:
+	if _rounds.has(round_no):
+		return _rounds[round_no]
+	var order := _shuffled_cast(round_no)
+	if order.size() > 2 and int(order[0]) == int(_shuffled_cast(round_no - 1)[order.size() - 1]):
+		var first: Variant = order[0]
+		order[0] = order[1]
+		order[1] = first
+	if _rounds.size() >= 4:
+		_rounds.clear()
+	_rounds[round_no] = order
+	return order
+
+
+static func _shuffled_cast(round_no: int) -> Array:
 	var order := range(_cast.size())
-	ZRng.new(ZRng.hash_string("jester-of-the-day/%d" % floori(day / float(_cast.size())))).shuffle(order)
-	return _cast[int(order[posmod(day, _cast.size())])]
+	ZRng.new(ZRng.hash_string("jester-of-the-day/%d" % round_no)).shuffle(order)
+	return order
 
 
 ## A poker hand's name as the game shows it ("Two Pair").
