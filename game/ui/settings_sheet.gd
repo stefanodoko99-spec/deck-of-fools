@@ -56,7 +56,7 @@ func _build() -> void:
 		Settings.vibration_level = i
 		Feel.buzz(30)))
 	if Settings.tutorial_step < 0:
-		_row(play, "First-run tips", UiTheme.button("Show again", func() -> void: _change(func() -> void: Settings.tutorial_step = 0)))
+		_row(play, "Guided first run", UiTheme.button("Guide me again", func() -> void: _change(func() -> void: Settings.tutorial_step = 0)))
 
 	var look := _group(right, "Card back")
 	var back := HBoxContainer.new()

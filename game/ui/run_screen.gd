@@ -99,7 +99,9 @@ var overlay: Control
 
 var tip: Control
 
-var coach: Control
+var guide: Guide
+## The cards the guide rings on the first hand: the player's best poker hand.
+var _suggested: Array = []
 var jester_views: Array = []
 
 
@@ -170,9 +172,10 @@ func _build_screen() -> void:
 	tip = Control.new()
 	tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stage.add_child(tip)
-	coach = Control.new()
-	coach.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stage.add_child(coach)
+	guide = Guide.new(fit)
+	guide.next_pressed.connect(func() -> void: _coach_to(Settings.tutorial_step + 1))
+	guide.skip_pressed.connect(func() -> void: _coach_to(-1))
+	add_child(guide)
 	overlay = Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -346,70 +349,162 @@ func refresh() -> void:
 
 
 
-const COACH := [
-	[RunState.Phase.CHOOSE_SHOW, "Welcome to the tour! Every town has three shows. Score a show's target to win it. Tap Play Matinee to begin.", false],
-	[RunState.Phase.IN_SHOW, "These are your cards. Tap up to 5 to make a poker hand: a pair, two pair, a flush, a straight... Hold any card to read it.", false],
-	[RunState.Phase.IN_SHOW, "The left panel shows the hand's Points x Mult, and the middle what it will score. Press Play hand (or flick a card up).", false],
-	[RunState.Phase.IN_SHOW, "Score = Points x Mult. Reach the target before your Hands run out. Discard swaps cards for new ones (or flick one down).", true],
-	[RunState.Phase.CASH_OUT, "Show won! Unused hands pay extra ducats. Cash out to visit the Market.", false],
-	[RunState.Phase.SHOP, "In the Market, Jesters stay with you and boost every hand. Buy one if you can, then press Next show.", true],
+## The guided first run, one step at a time. Each step belongs to a phase of the run,
+## points at one thing (a button by the start of its label, or an area) and moves on
+## by itself once the player has done it; steps with "next" wait for a button instead.
+## Settings.tutorial_step is the step reached (-1 when finished or skipped).
+const GUIDE := [
+	{ "phase": RunState.Phase.CHOOSE_SHOW, "title": "Your first show", "at": "button:Play ",
+		"text": "Each town has three shows. Score a show's target to win it. Tap Play %s to begin." },
+	{ "phase": RunState.Phase.IN_SHOW, "title": "Make a poker hand", "at": "hand",
+		"text": "Tap up to 5 cards to make a poker hand. Pairs, straights and flushes score more. %s" },
+	{ "phase": RunState.Phase.IN_SHOW, "title": "Points x Mult", "at": "hand_score", "next": "Next",
+		"text": "This is what your hand will score: its Points times its Mult. Every card that scores adds its own Points." },
+	{ "phase": RunState.Phase.IN_SHOW, "title": "Play it", "at": "button:Play hand",
+		"text": "Tap Play hand to score it. You can also flick a card upward to play." },
+	{ "phase": RunState.Phase.IN_SHOW, "title": "Reach the target", "at": "score", "next": "Got it",
+		"text": "Your score adds up hand by hand. Beat the target before your hands run out." },
+	{ "phase": RunState.Phase.IN_SHOW, "title": "Discards", "at": "button:Discard", "next": "Got it",
+		"text": "Nothing good to play? Select the cards you don't want and Discard them to draw new ones. Each show gives you a few." },
+	{ "phase": RunState.Phase.CASH_OUT, "title": "Show won!", "at": "button:Cash out",
+		"text": "You earn ducats for the win, and every hand you didn't need pays extra. Tap Cash out." },
+	{ "phase": RunState.Phase.SHOP, "title": "The Market", "at": "shop_jester", "next": "Not now",
+		"text": "Jesters stay with you and boost every hand. Tap one to read what it does, then Buy it." },
+	{ "phase": RunState.Phase.SHOP, "title": "Your Jesters", "at": "jesters", "next": "Got it",
+		"text": "Your Jesters work on every hand, left to right. Drag one to change the order; tap it to read it or sell it." },
+	{ "phase": RunState.Phase.SHOP, "title": "On to the next show", "at": "button:Next show",
+		"text": "Done shopping? Go on to the next show. That's everything: the tour is yours. Good luck!" },
 ]
 
 
 
+## Move the guide along to match what the player has already done.
 func _advance_coach() -> void:
 	var s := Settings.tutorial_step
-	if s < 0 or s >= COACH.size():
+	if s < 0 or s >= GUIDE.size():
 		return
+	var p := run.phase
 	var played := int(run.counters.get("hands_played", 0)) > 0
-	if s == 0 and run.phase != RunState.Phase.CHOOSE_SHOW:
+	if p == RunState.Phase.LOST:
+		s = -1
+	if s == 0 and p != RunState.Phase.CHOOSE_SHOW:
 		s = 1
 	if s == 1 and (not selected_hand.is_empty() or played):
 		s = 2
-	if s == 2 and played:
-		s = 3
-	if s == 3 and (run.phase == RunState.Phase.CASH_OUT or run.phase == RunState.Phase.SHOP):
+	if (s == 2 or s == 3) and played:
 		s = 4
-	if s == 4 and run.phase == RunState.Phase.SHOP:
-		s = 5
+	if s >= 1 and s <= 5 and (p == RunState.Phase.CASH_OUT or p == RunState.Phase.SHOP):
+		s = 6
+	if s == 6 and p == RunState.Phase.SHOP:
+		s = 7
+	if s == 7 and not run.zanni.is_empty():
+		s = 8
+	if s == 8 and run.zanni.is_empty():
+		s = 9
+	# Leaving the Market finishes the guide; the How to play sheet isn't needed after it.
+	if s >= 7 and p != RunState.Phase.SHOP and p != RunState.Phase.PACK:
+		s = -1
+		Settings.seen_help = true
 	if s != Settings.tutorial_step:
 		Settings.tutorial_step = s
 		Settings.save()
 
 
 func _build_coach() -> void:
-	_clear(coach)
+	if guide == null:
+		return
 	_advance_coach()
 	var s := Settings.tutorial_step
-	if busy or s < 0 or s >= COACH.size() or run.phase != COACH[s][0]:
+	if busy or s < 0 or s >= GUIDE.size():
+		guide.hide_step()
 		return
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", UiTheme.panel_box(Color(UiTheme.PANEL_DARK, 0.96), UiTheme.GOLD))
-	panel.position = Vector2(AREA_X + 2.0, 4.0)
-	panel.size = Vector2(minf(area_w - 112.0, 420.0), 0)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 3)
-	panel.add_child(col)
-	var top := HBoxContainer.new()
-	var step_label := UiTheme.label("First run  -  tip %d of %d" % [s + 1, COACH.size()], 8, UiTheme.GOLD)
-	step_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(step_label)
-	if COACH[s][2]:
-		top.add_child(UiTheme.button("Got it", func() -> void: _coach_to(s + 1), 9, UiTheme.POINTS))
-	top.add_child(UiTheme.button("Skip tips", func() -> void: _coach_to(-1), 9))
-	col.add_child(top)
-	col.add_child(_wrapped(COACH[s][1], 10, panel.size.x - 16.0))
-	coach.add_child(panel)
-	if not Settings.reduce_motion:
-		panel.modulate.a = 0.0
-		panel.create_tween().tween_property(panel, "modulate:a", 1.0, 0.2)
+	var shown := s
+	# Points x Mult and Play hand need cards picked; with none, point at the hand again.
+	if (s == 2 or s == 3) and selected_hand.is_empty():
+		shown = 1
+	var step: Dictionary = GUIDE[shown]
+	if run.phase != step["phase"]:
+		guide.hide_step()
+		return
+	var text := str(step["text"])
+	match shown:
+		0:
+			text = text % SHOW_NAMES[run.show_index]
+		1:
+			text = text % _suggest_hand()
+	var at := str(step["at"])
+	if shown == 7 and str(selection.get("zone", "")) == "offer":
+		at = "button:Buy"
+		text = "Tap Buy to take it. Its price in ducats is on its corner."
+	guide.show_step("%d %s" % [shown, text], shown, GUIDE.size(), str(step["title"]), text, str(step.get("next", "")), _guide_rect.bind(at), _guide_marks)
 
 
 func _coach_to(step: int) -> void:
 	Feel.play("click")
-	Settings.tutorial_step = step if step < COACH.size() else -1
+	Settings.tutorial_step = step if step < GUIDE.size() else -1
 	Settings.save()
 	_build_coach()
+
+
+## Finds the player's best poker hand in the cards held, to ring on the first hand,
+## and says what it is.
+func _suggest_hand() -> String:
+	_suggested = []
+	if run.hand.is_empty():
+		return ""
+	var result := HandEvaluator.evaluate(run.hand)
+	var cards := result.scoring.slice(0, 5)
+	for card: PlayingCard in cards:
+		_suggested.append(card.id)
+	if result.type == HandTable.HIGH_CARD:
+		return "No pair this time: the ringed card is your highest. Play it, or discard and draw new cards."
+	return "The ringed cards make a %s." % _hand_name(result.type)
+
+
+func _guide_marks() -> Array:
+	var out := []
+	if Settings.tutorial_step < 0 or Settings.tutorial_step > 3 or not selected_hand.is_empty():
+		return out
+	for child in hand_row.get_children():
+		if child is CardView and not child.is_queued_for_deletion() and _suggested.has((child as CardView).card.id):
+			out.append((child as CardView).get_global_rect())
+	return out
+
+
+## Where the guide points, in global coordinates: a button found by the start of its
+## label, or one of the named areas of the screen.
+func _guide_rect(at: String) -> Rect2:
+	if at.begins_with("button:"):
+		var prefix := at.substr(7)
+		for child in buttons.get_children():
+			if child is Button and not child.is_queued_for_deletion() and (child as Button).text.begins_with(prefix):
+				return (child as Button).get_global_rect()
+		return Rect2()
+	var area := Rect2()
+	match at:
+		"hand":
+			for child in hand_row.get_children():
+				if child is CardView and not child.is_queued_for_deletion():
+					var r := (child as Control).get_global_rect()
+					area = r if not area.has_area() else area.merge(r)
+		"hand_score":
+			area = lbl_hand.get_global_rect().merge((lbl_points.get_parent().get_parent() as Control).get_global_rect())
+		"score":
+			area = (lbl_target.get_parent().get_parent() as Control).get_global_rect().merge((lbl_score.get_parent().get_parent() as Control).get_global_rect())
+		"shop_jester":
+			for child in middle.get_children():
+				if child is CardView and not child.is_queued_for_deletion() and (child as CardView).tag.get("zone", "") == "offer":
+					var v := child as CardView
+					if v.kind == "zanni":
+						return v.get_global_rect()
+					if not area.has_area():
+						area = v.get_global_rect()
+		"jesters":
+			for v: Variant in jester_views:
+				if v is CardView and is_instance_valid(v):
+					var r := (v as Control).get_global_rect()
+					area = r if not area.has_area() else area.merge(r)
+	return area
 
 
 
@@ -1268,7 +1363,7 @@ func _on_play() -> void:
 	selection = {}
 	_clear(middle)
 	_clear(tip)
-	_clear(coach)
+	_build_coach()
 	_build_hand()
 	_build_buttons()
 	var views := {}

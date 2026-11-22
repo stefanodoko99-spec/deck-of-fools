@@ -5,7 +5,7 @@ extends RefCounted
 ##   ?screen=jesters&page=1     the Jesters, a page at a time
 ##   ?screen=items              Tarocchi, Signs, Omens, Warrants, Patrons, Favors, packs
 ##   ?screen=big                a few faces at large size, to judge detail
-##   ?screen=menu | run         the real screens
+##   ?screen=menu | run         the real screens (run&guide=0 starts the guided first run)
 ##   ?screen=collection&page=2  the Jester collection (&inspect=z_zanni opens one up close)
 ## Add &found=60 to menu or collection to pretend that many Jesters have been met.
 ##   ?screen=sky                the backdrop alone
@@ -56,6 +56,14 @@ static func open(main: Control, request: Dictionary) -> void:
 			main.call("_clear")
 			return
 		"run":
+			# &guide=0 starts the guided first run (any step number works).
+			if request.has("guide"):
+				Settings.tutorial_step = int(request["guide"])
+			# &easy=1 lowers every show's target to 40, to reach the Market quickly.
+			if request.has("easy"):
+				Game.changed.connect(func() -> void:
+					if Game.run != null and Game.run.phase == RunState.Phase.IN_SHOW:
+						Game.run.show_target = minf(Game.run.show_target, 40.0))
 			Game.new_run("d_bergamo", 1, "", "PREVIEW")
 			main.call("_show_run")
 			return

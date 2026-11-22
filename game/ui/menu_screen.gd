@@ -142,8 +142,13 @@ func _build_setup(stage: Control) -> void:
 	play.position = Vector2(LEFT.x, 312)
 	play.size = Vector2(LEFT_W, 30)
 	stage.add_child(play)
+	var note := ""
 	if Game.has_saved_run() and not locked:
-		var warn := UiTheme.label("Starting a new run ends the tour in progress.", 8, UiTheme.MUTED)
+		note = "Starting a new run ends the tour in progress."
+	elif Settings.tutorial_step == 0 and not locked:
+		note = "Your first run is guided, step by step."
+	if note != "":
+		var warn := UiTheme.label(note, 8, UiTheme.MUTED if Game.has_saved_run() else UiTheme.GOLD)
 		warn.position = Vector2(LEFT.x, 344)
 		warn.size = Vector2(LEFT_W, 10)
 		warn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
