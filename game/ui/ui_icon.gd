@@ -2,7 +2,7 @@ class_name UiIcon
 extends Control
 ## Line icons drawn in code, so they stay sharp at any size: rounded strokes in
 ## the style of the system icons on iPhone. Names: settings, profile, trophy,
-## help, info, pause, close, back, forward, download.
+## help, info, pause, close, back, forward, download, gift, play (a rewarded ad), shop, lock.
 
 var icon := ""
 var colour := Color.WHITE
@@ -67,3 +67,23 @@ func _draw() -> void:
 			line.call(PackedVector2Array([at.call(0.2, 0.66), at.call(0.2, 0.82), at.call(0.8, 0.82), at.call(0.8, 0.66)]))
 		"forward":
 			line.call(PackedVector2Array([at.call(0.38, 0.22), at.call(0.66, 0.5), at.call(0.38, 0.78)]))
+		"gift":
+			# A box with a ribbon and a bow.
+			line.call(PackedVector2Array([at.call(0.2, 0.44), at.call(0.2, 0.84), at.call(0.8, 0.84), at.call(0.8, 0.44)]))
+			line.call(PackedVector2Array([at.call(0.14, 0.32), at.call(0.86, 0.32), at.call(0.86, 0.44), at.call(0.14, 0.44), at.call(0.14, 0.32)]))
+			line.call(PackedVector2Array([at.call(0.5, 0.32), at.call(0.5, 0.84)]))
+			draw_arc(at.call(0.38, 0.24), s * 0.1, PI * 0.1, PI * 1.9, 12, colour, w, true)
+			draw_arc(at.call(0.62, 0.24), s * 0.1, -PI * 0.9, PI * 0.9, 12, colour, w, true)
+		"play":
+			# A rounded play triangle in a ring: "watch an ad".
+			draw_arc(at.call(0.5, 0.5), s * 0.42, 0.0, TAU, 32, colour, w, true)
+			draw_colored_polygon(PackedVector2Array([at.call(0.42, 0.33), at.call(0.68, 0.5), at.call(0.42, 0.67)]), colour)
+		"shop":
+			# A shopping bag.
+			line.call(PackedVector2Array([at.call(0.2, 0.36), at.call(0.8, 0.36), at.call(0.76, 0.86), at.call(0.24, 0.86), at.call(0.2, 0.36)]))
+			draw_arc(at.call(0.5, 0.36), s * 0.15, PI, TAU, 12, colour, w, true)
+		"lock":
+			draw_arc(at.call(0.5, 0.4), s * 0.16, PI, TAU, 12, colour, w, true)
+			line.call(PackedVector2Array([at.call(0.34, 0.4), at.call(0.34, 0.47)]))
+			line.call(PackedVector2Array([at.call(0.66, 0.4), at.call(0.66, 0.47)]))
+			draw_rect(Rect2(at.call(0.26, 0.47), Vector2(0.48, 0.36) * s), colour, true)
