@@ -40,7 +40,11 @@ func _ready() -> void:
 	ContentPacks.register_all()
 	TranslationServer.set_locale("en")
 	money_mode = Monetization.mode()
+	var brand_new := not FileAccess.file_exists(PROFILE_PATH)
 	profile = _load_profile()
+	if brand_new:
+		# Before this player's first list of news: the What's new notes already up are not news to them.
+		PlaybillSheet.mark_new_player()
 	if profile.first_played == "":
 		profile.first_played = Economy.today()
 		_save_json(PROFILE_PATH, profile.to_dict(), false)
@@ -192,7 +196,8 @@ func _tell_run_events(kind: String, action: Dictionary, result: Dictionary, befo
 		"play":
 			run_event.emit("hand_played", { "hand": str(result.get("hand", "")), "total": float(result.get("total", 0.0)),
 				"points": float(result.get("points", 0.0)), "mult": float(result.get("mult", 0.0)),
-				"cards": (action.get("cards", []) as Array).size(), "show": before_show, "town": before_town })
+				"cards": (action.get("cards", []) as Array).size(), "show": before_show, "town": before_town,
+				"contains": result.get("contains", []) })
 		"discard":
 			run_event.emit("discarded", { "count": (action.get("cards", []) as Array).size(), "show": before_show, "town": before_town })
 	if run.zanni.size() > zanni_before and (kind == "buy" or kind == "pick"):

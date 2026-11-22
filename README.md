@@ -46,14 +46,20 @@ Every `game/tests/test_*.gd` is a suite (`game/tests/suite.gd` explains the rule
 open build/ios/DeckOfFools.xcodeproj
 ```
 
-`ios.sh` exports the Xcode project (needs Godot's iOS template). In Xcode, choose your team under Signing & Capabilities, connect your iPhone and press Run. See [docs/APP_STORE.md](docs/APP_STORE.md) for the App Store steps.
+`ios.sh` exports the Xcode project (needs Godot's iOS template). In Xcode, choose your team under Signing & Capabilities, connect your iPhone and press Run. To run it in the iOS Simulator on an Apple-silicon Mac, run `tools/ios_sim.sh` after `ios.sh`: it builds and launches the game in the booted Simulator, and Xcode's Run works there afterwards. See [docs/APP_STORE.md](docs/APP_STORE.md) for the App Store steps.
 
 ## Deploy the API
+
+Apply any new migrations first, then deploy: the news and letters routes answer with an error until `0002_news_letters.sql` is in.
+
+```sh
+cd api && npx wrangler d1 migrations apply deck-of-fools --remote
+```
 
 ```sh
 cd api && npx wrangler deploy
 ```
 
-New tables go in a new file in `api/migrations/`, applied with `npx wrangler d1 migrations apply deck-of-fools --remote`.
+New tables go in a new file in `api/migrations/`. See [docs/LIVE_OPS.md](docs/LIVE_OPS.md) for posting news and letters.
 
 Decks are listed twice: in `game/content/deck_cards.gd` and in the `DECKS` list in `api/src/index.js` (from `src/daily.js`). A deck missing from the API list is rejected when a run is handed in, so add new decks to both.

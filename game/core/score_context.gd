@@ -76,4 +76,6 @@ func summary() -> Dictionary:
 		"total": total,
 		"scoring": scoring.map(func(c: PlayingCard) -> int: return c.id),
 		"events": events.duplicate(true),
+		# Every poker hand the played cards contain: a Flush of four cards can hold a Pair.
+		"contains": contains.keys().filter(func(k: String) -> bool: return bool(contains[k])),
 	}

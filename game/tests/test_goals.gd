@@ -300,6 +300,16 @@ func test_a_hand_contains_what_the_scorer_says() -> void:
 	var seen := hand("straight")
 	seen["contains"] = five_to_eight.contains
 	eq(GoalDefs.advance(pairs, 0, "hand_played", seen), 1, "a Straight with a Pair beside it")
+	# The scorer's summary (a played hand's result, which Game passes on in hand_played).
+	var ctx := ScoreContext.new()
+	ctx.hand_type = result.type
+	ctx.contains = result.contains
+	var told: Variant = ctx.summary().get("contains")
+	check(told is Array and (told as Array).has("pair") and (told as Array).has("flush"), "the summary lists the Pair and the Flush")
+	check(told is Array and not (told as Array).has("straight"), "and nothing the cards don't hold")
+	var passed := hand("flush")
+	passed["contains"] = told
+	eq(GoalDefs.advance(pairs, 0, "hand_played", passed), 1, "a Pair goal counts it from the summary")
 
 
 func test_run_events_move_todays_goals() -> void:

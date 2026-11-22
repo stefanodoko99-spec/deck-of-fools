@@ -1349,6 +1349,11 @@ func _build_overlay() -> void:
 	col.add_child(_centred(UiTheme.title("The show is over" if lost else "All %d towns conquered!" % r.final_town(), 24, accent)))
 	var what := UiTheme.name_of(r.challenge) if r.challenge != "" else "%s, Stake %d" % [UiTheme.name_of(r.deck_id), r.stake]
 	col.add_child(_centred(UiTheme.label("Town %d - %s   |   %s" % [r.town, SHOW_NAMES[r.show_index], what], 10, UiTheme.MUTED)))
+	if lost:
+		# One line about this run (a Sign still held, discards left, the favourite hand), or none.
+		var tip := Tips.insight_line(r, 392.0)
+		if tip != null:
+			col.add_child(tip)
 	col.add_child(RunCoins.end_row(Game.run_meta, _curtain_call_open(), _on_curtain_call, not Game.recorded, _curtain_roll))
 	_curtain_roll = -1
 	if _curtain_note != "":

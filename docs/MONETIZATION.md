@@ -18,6 +18,9 @@ AppMagic and others).
   - finishing the daily run (ranked or practice): 50, once a day;
   - the daily gift (30 to 150 coins over a 7-day calendar that never resets);
   - every 25 Jesters found in the collection: 250 coins and 20 diamonds;
+  - goals: each daily goal 30 to 75 coins, the weekly goal 100 coins
+    (`game/core/goal_defs.gd`). Goals never pay diamonds, and an unfinished goal
+    waits for the player instead of expiring;
   - the curtain call: a finished run's show and win coins can be doubled once by a
     rewarded ad.
   - Daily practice pays half, and after 1,500 coins from shows in a day further shows
