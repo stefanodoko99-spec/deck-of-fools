@@ -556,6 +556,8 @@ func apply(action: Dictionary) -> Dictionary:
 			result = _buy_warrant(int(a.get("index", 0)))
 		"swap_patron":
 			result = _swap_patron()
+		"encore":
+			result = _encore()
 		_:
 			result = _fail("unknown action")
 	if result["ok"]:
@@ -736,8 +738,36 @@ func _lose_or_rescue() -> void:
 			_win_show(true)
 			return
 	phase = Phase.LOST
+	# Lost in a show (not given up): an Encore can still bring the run back.
+	show_counters["lost"] = true
 	if show_index == Shows.PATRON:
 		feats["lost_to_patron"] = true
+
+
+## Whether the run can take an Encore now: it has just lost a show by running out of
+## hands (not by giving up), hasn't had one yet, and has cards left to play.
+func can_encore() -> bool:
+	return phase == Phase.LOST and bool(show_counters.get("lost", false)) and encores() == 0 \
+		and not (hand.is_empty() and draw_pile.is_empty())
+
+
+func encores() -> int:
+	return int(counters.get("encores", 0))
+
+
+## An Encore: the show goes on with Economy.ENCORE_HANDS more hands and
+## Economy.ENCORE_DISCARDS more discards, the score kept and the hand refilled.
+## Once per run. Runs with an Encore are not ranked (see Game.finish_run).
+func _encore() -> Dictionary:
+	if not can_encore():
+		return _fail("no Encore now")
+	phase = Phase.IN_SHOW
+	show_counters.erase("lost")
+	hands_left += Economy.ENCORE_HANDS
+	discards_left += Economy.ENCORE_DISCARDS
+	_count("encores")
+	_draw_to_full()
+	return _ok({})
 
 
 func _hand_feats(ctx: ScoreContext) -> void:

@@ -1,0 +1,131 @@
+class_name ShopCatalog
+extends RefCounted
+## Everything the shop sells. ITEMS cost coins or diamonds and are handled entirely in
+## the game. PRODUCTS cost real money and go through the platform store (App Store on
+## iPhone, a web checkout in the browser); their ids are the store product ids to
+## create in App Store Connect when the store is connected (docs/MONETIZATION.md).
+## Nothing sold here is random, so there are no odds to disclose, and nothing gives an
+## advantage in ranked play.
+
+## Card backs 0-5 are free for everyone; these are drawn by CardView._draw_back.
+const ITEMS := [
+	{ "id": "back_gilded_sun", "kind": "card_back", "back": 6, "name": "Gilded sun", "currency": "coins", "price": 500,
+		"text": "A golden sunburst on midnight blue." },
+	{ "id": "back_venetian_glass", "kind": "card_back", "back": 7, "name": "Venetian glass", "currency": "coins", "price": 900,
+		"text": "Murano glass in teal and gold." },
+	{ "id": "back_opera_night", "kind": "card_back", "back": 8, "name": "Opera night", "currency": "diamonds", "price": 150,
+		"text": "Velvet seats under a chandelier." },
+	{ "id": "back_carnival_gold", "kind": "card_back", "back": 9, "name": "Carnival gold", "currency": "diamonds", "price": 250,
+		"text": "Gold leaf, confetti and a jester's crown." },
+	{ "id": "encore_ticket", "kind": "item", "name": "Encore ticket", "currency": "diamonds", "price": 25, "count": 1,
+		"text": "After losing a show, play on with one more hand and discard. One Encore per run; the run is then unranked." },
+	{ "id": "encore_tickets_3", "kind": "item", "item": "encore_ticket", "name": "3 Encore tickets", "currency": "diamonds", "price": 60, "count": 3,
+		"text": "Three Encores for later runs." },
+	{ "id": "coins_600", "kind": "coins", "name": "Purse of coins", "currency": "diamonds", "price": 50, "amount": 600,
+		"text": "600 coins." },
+	{ "id": "coins_2000", "kind": "coins", "name": "Chest of coins", "currency": "diamonds", "price": 140, "amount": 2000,
+		"text": "2,000 coins." },
+]
+
+## Real-money products. "usd" is only a reference price for the test store; the live
+## store shows the platform's localized price.
+const PRODUCTS := [
+	{ "id": "dof.starter", "kind": "bundle", "name": "Starter pack", "usd": 2.99, "once": true,
+		"diamonds": 300, "coins": 1000, "grant": ["back_starter_crest"], "items": { "encore_ticket": 1 },
+		"text": "300 diamonds, 1,000 coins, an Encore ticket and the Starter's crest card back. Once per player." },
+	{ "id": "dof.remove_ads", "kind": "unlock", "name": "No intermissions", "usd": 3.99, "once": true, "grant": ["remove_ads"],
+		"text": "No more ad breaks between towns. Optional rewards (double coins, Encore) stay available." },
+	{ "id": "dof.diamonds.100", "kind": "diamonds", "name": "Handful of diamonds", "usd": 0.99, "diamonds": 100,
+		"text": "100 diamonds." },
+	{ "id": "dof.diamonds.550", "kind": "diamonds", "name": "Pouch of diamonds", "usd": 4.99, "diamonds": 550,
+		"text": "500 diamonds + 50 bonus." },
+	{ "id": "dof.diamonds.1200", "kind": "diamonds", "name": "Box of diamonds", "usd": 9.99, "diamonds": 1200,
+		"text": "1,000 diamonds + 200 bonus." },
+	{ "id": "dof.diamonds.2500", "kind": "diamonds", "name": "Casket of diamonds", "usd": 19.99, "diamonds": 2500,
+		"text": "2,000 diamonds + 500 bonus." },
+	{ "id": "dof.diamonds.6500", "kind": "diamonds", "name": "Treasury of diamonds", "usd": 49.99, "diamonds": 6500,
+		"text": "5,000 diamonds + 1,500 bonus." },
+]
+
+## Card backs that are never sold on their own (they come in a bundle).
+const BUNDLE_BACKS := { "back_starter_crest": 10 }
+## Names of card backs 6+ (0-5 are named in Settings.CARD_BACKS).
+const BACK_NAMES := { 6: "Gilded sun", 7: "Venetian glass", 8: "Opera night", 9: "Carnival gold", 10: "Starter's crest" }
+
+
+static func item(id: String) -> Dictionary:
+	for entry: Dictionary in ITEMS:
+		if entry["id"] == id:
+			return entry
+	return {}
+
+
+static func product(id: String) -> Dictionary:
+	for entry: Dictionary in PRODUCTS:
+		if entry["id"] == id:
+			return entry
+	return {}
+
+
+## The wallet id that owns card back `index`, or "" when the back is free.
+static func back_id(index: int) -> String:
+	for entry: Dictionary in ITEMS:
+		if entry["kind"] == "card_back" and int(entry["back"]) == index:
+			return str(entry["id"])
+	for id: String in BUNDLE_BACKS:
+		if int(BUNDLE_BACKS[id]) == index:
+			return id
+	return ""
+
+
+static func back_unlocked(index: int, wallet: Wallet) -> bool:
+	var id := back_id(index)
+	return id == "" or wallet.owns(id)
+
+
+## Whether `wallet` may buy the item now, and if not, why (in words).
+static func why_not(entry: Dictionary, wallet: Wallet) -> String:
+	if entry.is_empty():
+		return "Not for sale."
+	if entry["kind"] == "card_back" and wallet.owns(str(entry["id"])):
+		return "Owned."
+	if not wallet.can_afford(str(entry["currency"]), int(entry["price"])):
+		return "Not enough %s." % entry["currency"]
+	return ""
+
+
+## Buy an in-game item with coins or diamonds. Returns "" on success or the reason.
+static func buy(id: String, wallet: Wallet) -> String:
+	var entry := item(id)
+	var reason := why_not(entry, wallet)
+	if reason != "":
+		return reason
+	if not wallet.spend(str(entry["currency"]), int(entry["price"])):
+		return "Not enough %s." % entry["currency"]
+	match str(entry["kind"]):
+		"card_back":
+			wallet.grant(id)
+		"item":
+			wallet.add_item(str(entry.get("item", id)), int(entry.get("count", 1)))
+		"coins":
+			wallet.earn("coins", int(entry["amount"]))
+	return ""
+
+
+## Deliver a real-money product the store has confirmed. Returns "" or the reason.
+static func deliver(product_id: String, wallet: Wallet) -> String:
+	var p := product(product_id)
+	if p.is_empty():
+		return "Unknown product."
+	if bool(p.get("once", false)) and wallet.owns(product_id):
+		return "Already bought."
+	wallet.earn("diamonds", int(p.get("diamonds", 0)))
+	wallet.earn("coins", int(p.get("coins", 0)))
+	for id: Variant in p.get("grant", []):
+		wallet.grant(str(id))
+	var extra: Dictionary = p.get("items", {})
+	for id: Variant in extra:
+		wallet.add_item(str(id), int(extra[id]))
+	if bool(p.get("once", false)):
+		wallet.grant(product_id)
+	return ""

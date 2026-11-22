@@ -21,6 +21,11 @@ var badges: Dictionary = {}
 var jester_runs: Dictionary = {}
 var jester_wins: Dictionary = {}
 
+## Every finished run, any mode (new players see no intermissions for a while).
+var runs_played := 0
+## Coins, diamonds and what they bought (core/wallet.gd).
+var wallet := Wallet.new()
+
 
 
 func record_run(run: RunState) -> void:
@@ -29,6 +34,7 @@ func record_run(run: RunState) -> void:
 	for f in run.feats:
 		feats[f] = true
 	signs_used += int(run.counters.get("used_sign", 0))
+	runs_played += 1
 	var held := {}
 	for z in run.zanni:
 		held[z.def_id] = true
@@ -99,6 +105,7 @@ func to_dict() -> Dictionary:
 		"total_wins": total_wins, "runs_lost": runs_lost, "signs_used": signs_used,
 		"challenges_won": challenges_won.keys(), "badges": badges.duplicate(),
 		"jester_runs": jester_runs.duplicate(), "jester_wins": jester_wins.duplicate(),
+		"runs_played": runs_played, "wallet": wallet.to_dict(),
 	}
 
 
@@ -121,4 +128,9 @@ static func from_dict(d: Dictionary) -> Profile:
 		p.jester_runs[str(z)] = int(d["jester_runs"][z])
 	for z in d.get("jester_wins", {}):
 		p.jester_wins[str(z)] = int(d["jester_wins"][z])
+	# Profiles from before runs were counted: every finished run they know of.
+	p.runs_played = int(d.get("runs_played", p.total_wins + p.runs_lost + p.challenges_won.size()))
+	var w: Variant = d.get("wallet")
+	if w is Dictionary:
+		p.wallet = Wallet.from_dict(w)
 	return p

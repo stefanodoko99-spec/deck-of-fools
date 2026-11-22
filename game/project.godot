@@ -24,6 +24,8 @@ Game="*res://ui/game.gd"
 Feel="*res://ui/feel.gd"
 Online="*res://ui/online.gd"
 CardArt="*res://ui/card_art.gd"
+Ads="*res://ui/ads.gd"
+Store="*res://ui/store.gd"
 
 [deck_of_fools]
 
