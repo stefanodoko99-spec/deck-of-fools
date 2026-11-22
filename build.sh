@@ -44,4 +44,7 @@ fi
 # iOS launch screens for the installed web app.
 mkdir -p build/web/splash
 cp site/public/splash/*.png build/web/splash/
+# The start screen's two illustrations (game/web/shell.html), from the game's own art.
+mkdir -p build/web/keyart
+cp game/art/jesters/z_arlecchino.webp game/art/jesters/z_zanni.webp build/web/keyart/
 ls -la build/web
