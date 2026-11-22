@@ -4,98 +4,16 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 		<title>$GODOT_PROJECT_NAME</title>
-		<style>
-html, body, #canvas {
-	margin: 0;
-	padding: 0;
-	border: 0;
-}
-
-body {
-	color: white;
-	background-color: black;
-	overflow: hidden;
-	touch-action: none;
-}
-
-#canvas {
-	display: block;
-}
-
-#canvas:focus {
-	outline: none;
-}
-
-#status, #status-splash, #status-progress {
-	position: absolute;
-	left: 0;
-	right: 0;
-}
-
-#status, #status-splash {
-	top: 0;
-	bottom: 0;
-}
-
-#status {
-	background-color: $GODOT_SPLASH_COLOR;
-	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	visibility: hidden;
-}
-
-#status-splash {
-	max-height: 100%;
-	max-width: 100%;
-	margin: auto;
-}
-
-#status-splash.show-image--false {
-	display: none;
-}
-
-#status-splash.fullsize--true {
-	height: 100%;
-	width: 100%;
-	object-fit: contain;
-}
-
-#status-splash.use-filter--false {
-	image-rendering: pixelated;
-}
-
-#status-progress, #status-notice {
-	display: none;
-}
-
-#status-progress {
-	bottom: 10%;
-	width: 50%;
-	margin: 0 auto;
-}
-
-#status-notice {
-	background-color: #5b3943;
-	border-radius: 0.5rem;
-	border: 1px solid #9b3943;
-	color: #e0e0e0;
-	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
-	line-height: 1.3;
-	margin: 0 2rem;
-	overflow: hidden;
-	padding: 1rem;
-	text-align: center;
-	z-index: 1;
-}
-		</style>
 		<!-- Deck of Fools: installs as an app on iPhone, iPad, Android and desktop. -->
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 		<meta name="apple-mobile-web-app-title" content="Deck of Fools">
-		<meta name="theme-color" content="#1e0b3d">
+		<meta name="theme-color" content="#0f6e4f">
+		<meta name="description" content="A poker-hand roguelike about a travelling commedia dell'arte troupe.">
+		<!-- The start screen's two illustrations: fetched first, before the engine. -->
+		<link rel="preload" as="image" href="keyart/z_arlecchino.webp" fetchpriority="high">
+		<link rel="preload" as="image" href="keyart/z_zanni.webp" fetchpriority="high">
 		<!-- Launch screens for the installed web app on iPhone and iPad (site/public/splash). -->
 		<link rel="apple-touch-startup-image" media="screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/1320x2868.png">
 		<link rel="apple-touch-startup-image" media="screen and (device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" href="splash/2868x1320.png">
@@ -137,32 +55,111 @@ body {
 		<link rel="apple-touch-startup-image" media="screen and (device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="splash/2048x1536.png">
 		<link rel="apple-touch-startup-image" media="screen and (device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/1488x2266.png">
 		<link rel="apple-touch-startup-image" media="screen and (device-width: 744px) and (device-height: 1133px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" href="splash/2266x1488.png">
-		<meta name="description" content="A poker-hand roguelike about a travelling commedia dell'arte troupe.">
 		<style>
+/* The start screen: a title card in three colour blocks, Arlecchino on wine, the title
+   on harlequin green, Zanni on brick. While the game downloads, a hand of five cards
+   turns face up (four with the download, the Ace when the game is ready); then one
+   button starts or continues, and the two halves of the card slide apart like a
+   curtain onto the game, which is already running underneath. */
+:root {
+	--wine: #4f1230;
+	--brick: #8a2a17;
+	--green: #0f6e4f;
+	--cream: #fbf3e4;
+	--ink: #1d1230;
+	--heart: #ef2d56;
+	--ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+	--art: 27%;
+}
+html, body { margin: 0; padding: 0; border: 0; position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--green); color: var(--cream); }
 /* Edge to edge on iPhone: the canvas runs under the notch, the Dynamic Island and the
    home indicator (viewport-fit=cover); the game keeps its controls inside the safe
    area itself (UiTheme.safe_area). No bounce, zoom, text selection or long-press
    callout, so holding a card to read it doesn't pop up iOS menus. */
-html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background-color: #1e0b3d; }
 body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-#canvas { touch-action: none; }
-#status { background: radial-gradient(circle at 50% 45%, #5a1240, #1e0b3d 70%); }
-/* Loading: the title, a percentage and a tip under the bar, so the wait reads as the
-   theatre getting ready rather than a stalled page. */
-#status-title { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 800 clamp(30px, 7vw, 54px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, system-ui, sans-serif; letter-spacing: -.02em; color: #f0b84a; text-shadow: 0 4px 18px rgba(0, 0, 0, .45); }
-#status-caption { position: absolute; left: 0; right: 0; top: calc(50% + 34px); text-align: center; font: 600 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; color: #fbf3e4; -webkit-font-smoothing: antialiased; }
-#status-caption .tip { display: block; margin: 6px auto 0; max-width: min(520px, 86vw); font-weight: 500; font-size: 13px; color: #cbbfe0; transition: opacity .35s; }
-.dof-layer { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; font: 500 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; color: #fbf3e4; -webkit-font-smoothing: antialiased; }
+#canvas { display: block; margin: 0; border: 0; touch-action: none; }
+#canvas:focus { outline: none; }
+.dof-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+#status { position: fixed; inset: 0; z-index: 5; display: flex; overflow: hidden; font-family: var(--ui); -webkit-font-smoothing: antialiased; cursor: default; }
+/* The two halves: each is an illustration and half of the green field, so the card
+   can split down its middle. */
+.dof-half { flex: 1 1 50%; display: flex; min-width: 0; will-change: transform; transition: transform .74s cubic-bezier(.7, 0, .24, 1); }
+.dof-half.right { flex-direction: row-reverse; }
+.dof-art { position: relative; flex: 0 0 calc(var(--art) * 2); overflow: hidden; }
+.dof-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dof-art.arl { background: var(--wine); }
+.dof-art.arl img { object-position: 60% 30%; }
+.dof-art.zan { background: var(--brick); }
+.dof-art.zan img { object-position: 64% 30%; }
+.dof-green { flex: 1 1 auto; background: var(--green); }
+
+.dof-centre { position: absolute; top: 0; bottom: 0; left: var(--art); right: var(--art); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(16px, env(safe-area-inset-top)) clamp(14px, 3vw, 40px) max(34px, env(safe-area-inset-bottom)); box-sizing: border-box; text-align: center; transition: opacity .28s ease, transform .5s ease; }
+.dof-title { display: block; width: min(88%, 720px); height: auto; color: var(--cream); overflow: visible; }
+.dof-tagline { margin: .75em 0 0; font-weight: 600; font-size: clamp(12px, 1.4vh + .45vw, 18px); line-height: 1.3; color: rgba(251, 243, 228, .8); }
+
+/* The hand: five cards in a shallow fan. */
+.dof-hand { --cw: clamp(40px, min(12vh, 6.6vw), 88px); display: flex; justify-content: center; align-items: center; height: calc(var(--cw) * 1.55); margin: clamp(10px, 4vh, 40px) 0 clamp(6px, 2.4vh, 22px); perspective: 900px; }
+.dof-slot { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); margin: 0 calc(var(--cw) * -.07); }
+.dof-slot:nth-child(1) { transform: translateY(9%) rotate(-10deg); }
+.dof-slot:nth-child(2) { transform: translateY(2.5%) rotate(-5deg); }
+.dof-slot:nth-child(4) { transform: translateY(2.5%) rotate(5deg); }
+.dof-slot:nth-child(5) { transform: translateY(9%) rotate(10deg); }
+.dof-card { width: 100%; height: 100%; opacity: 0; transform: translateY(30%) scale(.94); transition: transform .46s cubic-bezier(.2, .8, .2, 1), opacity .3s ease; transition-delay: calc(var(--i) * 70ms); }
+.dealt .dof-card { opacity: 1; transform: none; }
+.dof-flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .56s cubic-bezier(.3, .7, .2, 1); }
+.up .dof-flip { transform: rotateY(180deg); }
+.dof-face { position: absolute; inset: 0; border-radius: calc(var(--cw) * .12); overflow: hidden; -webkit-backface-visibility: hidden; backface-visibility: hidden; box-shadow: 0 calc(var(--cw) * .08) calc(var(--cw) * .2) rgba(4, 30, 21, .35), 0 1px 2px rgba(4, 30, 21, .3); }
+.dof-face > svg { display: block; width: 100%; height: 100%; }
+.dof-front { transform: rotateY(180deg); background: #fffaf2; color: var(--heart); }
+.dof-front .rank { position: absolute; left: 10%; top: 8%; width: 46%; height: 27%; }
+.dof-front .pip { position: absolute; left: 11%; top: 40%; width: 20%; height: auto; aspect-ratio: 100 / 92; }
+.dof-front .big { position: absolute; right: 9%; bottom: 8%; width: 50%; height: auto; aspect-ratio: 100 / 92; }
+
+.dof-status { min-height: 1.4em; font-weight: 650; font-size: clamp(13px, 1.5vh + .4vw, 17px); line-height: 1.4; color: var(--cream); font-variant-numeric: tabular-nums; }
+.dof-go { display: none; flex-direction: column; align-items: center; margin-top: clamp(8px, 2.4vh, 18px); }
+.ready .dof-go { display: flex; animation: dof-rise .42s cubic-bezier(.2, .8, .2, 1) both; }
+.dof-play { appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; min-width: 200px; min-height: clamp(46px, 11vh, 56px); padding: 6px clamp(28px, 4vw, 44px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font: 800 clamp(16px, 2vh + .4vw, 20px)/1.15 var(--ui); color: var(--ink); background: var(--cream); cursor: pointer; box-shadow: 0 10px 24px rgba(4, 30, 21, .32); transition: transform .12s ease; }
+.dof-play small { font-size: .72em; font-weight: 600; color: rgba(29, 18, 48, .66); }
+.dof-play:active { transform: scale(.96); }
+.dof-play:focus-visible, .dof-alt:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+.dof-alt { appearance: none; -webkit-appearance: none; border: 0; background: none; margin-top: 4px; padding: 10px 16px; font: 600 clamp(13px, 1.4vh + .3vw, 15px)/1 var(--ui); color: var(--cream); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(251, 243, 228, .5); }
+.dof-alt[hidden] { display: none; }
+.dof-tip { position: absolute; left: 14px; right: 14px; bottom: max(12px, env(safe-area-inset-bottom)); margin: 0; font-weight: 500; font-size: clamp(11px, 1.3vh + .2vw, 14px); line-height: 1.35; color: rgba(251, 243, 228, .72); transition: opacity .4s ease; }
+.ready .dof-tip, .failed .dof-tip { opacity: 0; }
+.dof-notice { display: none; max-width: 440px; margin: 0; font-weight: 600; font-size: 15px; line-height: 1.45; color: var(--cream); }
+.failed .dof-notice { display: block; }
+.failed .dof-hand, .failed .dof-status { display: none; }
+.dof-retry { margin-top: 14px; }
+
+/* The curtain: the halves slide out to the sides and the title steps back. */
+#status.parting { pointer-events: none; }
+#status.parting .dof-half.left { transform: translateX(-101%); }
+#status.parting .dof-half.right { transform: translateX(101%); }
+#status.parting .dof-centre { opacity: 0; transform: scale(.97); }
+#status.fading { opacity: 0; transition: opacity .22s ease; pointer-events: none; }
+@keyframes dof-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Upright windows (an iPad in portrait, a narrow desktop window): the illustrations
+   sit side by side on top, the title below. Upright phones get the turn hint. */
+@media (max-aspect-ratio: 11/10) {
+	.dof-half { flex-direction: column; }
+	.dof-half.right { flex-direction: column; }
+	.dof-art { flex: 0 0 46%; }
+	.dof-centre { left: 0; right: 0; top: 46%; padding-top: 12px; }
+	.dof-title { width: min(84%, 640px); }
+}
+
 /* Phones held upright: the game is landscape only. */
-#rotate-hint { background: radial-gradient(circle at 50% 40%, #8e1230, #1e0b3d 75%); flex-direction: column; gap: 14px; text-align: center; padding: 24px; font-weight: 600; font-size: 19px; }
-#rotate-hint .phone { width: 46px; height: 76px; border: 4px solid #e2aa3e; border-radius: 10px; animation: dof-turn 2.4s ease-in-out infinite; }
+.dof-layer { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; font: 500 16px/1.45 var(--ui); color: var(--cream); -webkit-font-smoothing: antialiased; }
+#rotate-hint { background: var(--green); flex-direction: column; gap: 18px; text-align: center; padding: 24px; font-weight: 650; font-size: 19px; }
+#rotate-hint .phone { width: 46px; height: 76px; border: 4px solid var(--cream); border-radius: 11px; animation: dof-turn 2.4s ease-in-out infinite; }
 @keyframes dof-turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
 @media (orientation: portrait) and (max-width: 600px) { #rotate-hint { display: flex; } }
 /* Install sheet: how to add the game as an app where the browser has no prompt. */
 #install-sheet { background: rgba(5, 0, 12, 0.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 #install-sheet.open { display: flex; }
 #install-sheet .card { position: relative; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 22px 22px 18px; border-radius: 22px; background: rgba(26, 14, 49, 0.97); border: 1px solid rgba(255, 255, 255, 0.13); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); animation: dof-rise .26s cubic-bezier(.2, .8, .2, 1); }
-@keyframes dof-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 #install-sheet .top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 #install-sheet .top img { width: 56px; height: 56px; border-radius: 13px; box-shadow: 0 4px 14px rgba(0, 0, 0, .4); }
 #install-sheet h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.01em; color: #f0b84a; }
@@ -187,7 +184,11 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 	#install-sheet .done { margin-top: 8px; padding: 9px; }
 	#install-sheet .close { top: 10px; right: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { #rotate-hint .phone { animation: none; transform: rotate(-90deg); } #install-sheet .card { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+	.dof-card, .dof-flip, .dof-half, .dof-centre, .dof-tip { transition: none; }
+	.ready .dof-go, #install-sheet .card { animation: none; }
+	#rotate-hint .phone { animation: none; transform: rotate(-90deg); }
+}
 		</style>
 		<script>
 /* Install support for the game. The game's menu asks window.dofInstallState()
@@ -282,15 +283,75 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 		</canvas>
 
 		<noscript>
-			Your browser does not support JavaScript.
+			Deck of Fools needs JavaScript to run.
 		</noscript>
 
-		<div id="status">
-			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" src="$GODOT_SPLASH" alt="">
-			<div id="status-title">Deck of Fools</div>
-			<progress id="status-progress"></progress>
-			<div id="status-caption" aria-live="polite"><span class="pct">Setting the stage</span><span class="tip"></span></div>
-			<div id="status-notice"></div>
+		<!-- Shapes for the start screen: the title, the card ranks, the heart and the
+		     Harlequin card back. The title and ranks are outlined from the game's Inter
+		     (Black, display size) by tools/outline_text.gd, so they look the same on every
+		     device without downloading a font. -->
+		<svg class="dof-sprite" aria-hidden="true" focusable="false">
+			<defs>
+				<linearGradient id="dof-back-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff5d8f"/><stop offset="1" stop-color="#a1237a"/></linearGradient>
+				<pattern id="dof-back-p" width="8" height="10" patternUnits="userSpaceOnUse"><path d="M4 1.4L6.7 5L4 8.6L1.3 5Z" fill="#fff" fill-opacity=".22"/></pattern>
+				<symbol id="dof-wordmark" viewBox="39 -728 6111 741"><path fill="currentColor" d="M323 0L123.9 0L123.9 -168L313.3 -168Q372.8 -168 410.8 -189.2Q448.9 -210.4 467.5 -253.8Q486 -297.2 486 -363Q486 -429.8 467 -473.2Q448 -516.6 408.4 -537.8Q368.9 -559 307.4 -559L121 -559L121 -727L320.1 -727Q432.4 -727 515.8 -682.1Q599.2 -637.2 645.1 -555.5Q691 -473.8 691 -363Q691 -252.8 645.6 -171.3Q600.2 -89.8 517.8 -44.9Q435.3 0 323 0Z M242 -727L242 0L39 0L39 -727L242 -727Z M971.9 12Q891.8 12 829.8 -22.4Q767.8 -56.8 732.9 -117.9Q698 -178.9 698 -257.5Q698 -336.6 732.7 -397.4Q767.3 -458.2 828.1 -492.6Q888.9 -527 968 -527Q1027.6 -527 1076.9 -507.7Q1126.2 -488.5 1162.3 -453.1Q1198.5 -417.8 1218.2 -369.5Q1238 -321.2 1238 -263.2L1238 -211L755.5 -211L755.5 -320L1149 -320L1059 -301Q1059 -328.2 1048.7 -347.4Q1038.5 -366.6 1019.4 -376.8Q1000.4 -387 973 -387Q946.1 -387 926.8 -376.8Q907.5 -366.6 897.3 -347.3Q887 -328.1 887 -300.8L887 -214.6Q887 -186.3 898 -165.9Q909 -145.4 929.8 -134.7Q950.5 -124 979.3 -124Q1000.4 -124 1017.2 -129.4Q1034.1 -134.8 1045.8 -144.8Q1057.5 -154.8 1062.9 -168.5L1236 -168.5Q1226.8 -115.7 1189.7 -75.1Q1152.5 -34.5 1096.2 -11.2Q1039.8 12 971.9 12Z M1521.4 12Q1438.8 12 1376.8 -21.7Q1314.8 -55.4 1280.4 -116.2Q1246 -176.9 1246 -257.5Q1246 -338.1 1280.4 -398.8Q1314.8 -459.6 1376.8 -493.3Q1438.8 -527 1521.4 -527Q1578 -527 1625.6 -510.7Q1673.2 -494.3 1708.1 -464.3Q1743 -434.3 1763 -393.1Q1783 -351.8 1785 -301.6L1598.5 -301.6Q1597 -318.7 1591.4 -332.4Q1585.8 -346.1 1576.3 -355.9Q1566.8 -365.7 1553.8 -370.9Q1540.9 -376 1525.3 -376Q1499.4 -376 1481.1 -361.8Q1462.8 -347.6 1453 -321.2Q1443.3 -294.7 1443.3 -257.5Q1443.3 -220.8 1453 -194.1Q1462.8 -167.4 1481.4 -153.2Q1499.9 -139 1525.3 -139Q1540.9 -139 1553.8 -144.4Q1566.8 -149.8 1576.3 -159.6Q1585.8 -169.4 1591.4 -183.6Q1597 -197.8 1598.5 -215.4L1785 -215.4Q1785 -165.1 1765.7 -123.7Q1746.4 -82.2 1711.3 -51.7Q1676.1 -21.2 1627.8 -4.6Q1579.4 12 1521.4 12Z M1988.5 -117L1988.5 -347L2011 -347L2141.8 -515L2362.5 -515L2143.8 -242.7L2089.1 -242.7L1988.5 -117Z M1814 0L1814 -727L2009 -727L2009 0L1814 0Z M2146.7 0L2023.6 -199.8L2149.6 -336.3L2368.4 0L2146.7 0Z M2811.1 12Q2727.7 12 2664.2 -21Q2600.8 -53.9 2565.4 -114.4Q2530 -175 2530 -257.5Q2530 -340 2565.4 -400.3Q2600.8 -460.6 2664.2 -493.8Q2727.7 -527 2811.1 -527Q2895.1 -527 2958.3 -493.8Q3021.5 -460.6 3056.9 -400.3Q3092.3 -340 3092.3 -257.5Q3092.3 -175 3056.9 -114.4Q3021.5 -53.9 2958.3 -21Q2895.1 12 2811.1 12Z M2811.1 -140.2Q2834.5 -140.2 2853.5 -153.4Q2872.6 -166.6 2883.8 -192.8Q2895 -218.9 2895 -257.5Q2895 -296.6 2883.8 -322.5Q2872.6 -348.4 2853.5 -361.6Q2834.5 -374.8 2811.1 -374.8Q2788.2 -374.8 2769 -361.6Q2749.7 -348.4 2738.5 -322.5Q2727.3 -296.6 2727.3 -257.5Q2727.3 -218.9 2738.5 -192.8Q2749.7 -166.6 2769 -153.4Q2788.2 -140.2 2811.1 -140.2Z M3486 -515L3486 -367L3089.5 -367L3089.5 -515L3486 -515Z M3184 0L3184 -561.1Q3184 -618.7 3204.5 -655.3Q3225 -691.9 3268.1 -709.4Q3311.1 -727 3378.5 -727Q3411.7 -727 3442.3 -727Q3472.8 -727 3486 -727L3486 -579Q3478.1 -579 3461.7 -579Q3445.2 -579 3432 -579Q3403 -579 3391 -567.3Q3379 -555.6 3379 -527.2L3379 0L3184 0Z M3694 -0.5L3694 -728L4240.5 -728L4240.5 -556L3897 -556L3897 -427L4221 -427L4221 -262L3897 -262L3897 -0.5L3694 -0.5Z M4523.1 12Q4439.7 12 4376.2 -21Q4312.8 -53.9 4277.4 -114.4Q4242 -175 4242 -257.5Q4242 -340 4277.4 -400.3Q4312.8 -460.6 4376.2 -493.8Q4439.7 -527 4523.1 -527Q4607.1 -527 4670.3 -493.8Q4733.5 -460.6 4768.9 -400.3Q4804.3 -340 4804.3 -257.5Q4804.3 -175 4768.9 -114.4Q4733.5 -53.9 4670.3 -21Q4607.1 12 4523.1 12Z M4523.1 -140.2Q4546.5 -140.2 4565.5 -153.4Q4584.6 -166.6 4595.8 -192.8Q4607 -218.9 4607 -257.5Q4607 -296.6 4595.8 -322.5Q4584.6 -348.4 4565.5 -361.6Q4546.5 -374.8 4523.1 -374.8Q4500.2 -374.8 4481 -361.6Q4461.7 -348.4 4450.5 -322.5Q4439.3 -296.6 4439.3 -257.5Q4439.3 -218.9 4450.5 -192.8Q4461.7 -166.6 4481 -153.4Q4500.2 -140.2 4523.1 -140.2Z M5095.1 12Q5011.7 12 4948.2 -21Q4884.8 -53.9 4849.4 -114.4Q4814 -175 4814 -257.5Q4814 -340 4849.4 -400.3Q4884.8 -460.6 4948.2 -493.8Q5011.7 -527 5095.1 -527Q5179.1 -527 5242.3 -493.8Q5305.5 -460.6 5340.9 -400.3Q5376.3 -340 5376.3 -257.5Q5376.3 -175 5340.9 -114.4Q5305.5 -53.9 5242.3 -21Q5179.1 12 5095.1 12Z M5095.1 -140.2Q5118.5 -140.2 5137.5 -153.4Q5156.6 -166.6 5167.8 -192.8Q5179 -218.9 5179 -257.5Q5179 -296.6 5167.8 -322.5Q5156.6 -348.4 5137.5 -361.6Q5118.5 -374.8 5095.1 -374.8Q5072.2 -374.8 5053 -361.6Q5033.7 -348.4 5022.5 -322.5Q5011.3 -296.6 5011.3 -257.5Q5011.3 -218.9 5022.5 -192.8Q5033.7 -166.6 5053 -153.4Q5072.2 -140.2 5095.1 -140.2Z M5602 -727L5602 0L5407 0L5407 -727L5602 -727Z M5894 13Q5817.3 13 5758.9 -9.7Q5700.5 -32.4 5666.1 -73.5Q5631.7 -114.5 5626.3 -168.7L5818.4 -168.7Q5821.8 -145.8 5840.7 -131.4Q5859.6 -117 5891.1 -117Q5920 -117 5936 -126Q5952 -135 5952 -150.2Q5952 -162.9 5937.8 -171.2Q5923.6 -179.5 5894.3 -184.4L5797.5 -200Q5719.7 -212.7 5678.8 -251.7Q5638 -290.8 5638 -353.2Q5638 -406.4 5667.1 -445.2Q5696.2 -484 5751.1 -505Q5806.1 -526 5883.3 -526Q5961.5 -526 6017.5 -503.8Q6073.4 -481.5 6104.2 -441Q6135 -400.5 6135 -344.3L5958 -344.3Q5958 -366.8 5938.6 -381.9Q5919.3 -397 5890.8 -397Q5862.4 -397 5847.2 -387.5Q5832 -378 5832 -363.8Q5832 -351.6 5844.5 -343.1Q5856.9 -334.5 5879.9 -330.6L5990.5 -312.1Q6072.2 -298.4 6111.1 -264.5Q6150 -230.5 6150 -172.5Q6150 -117.8 6118.2 -76.1Q6086.5 -34.3 6028.9 -10.7Q5971.2 13 5894 13Z"/></symbol>
+				<symbol id="dof-r-10" viewBox="17.5 -740 962.5 800" preserveAspectRatio="xMinYMin meet"><path fill="currentColor" d="M354 -727L354 0L185 0L185 -569.9L184 -569.9L17.5 -466L17.5 -614.8L196.7 -727L354 -727Z M673 12Q577.3 12 508.5 -33.7Q439.7 -79.3 402.9 -163.3Q366 -247.3 366 -363Q366 -479.2 402.9 -563.5Q439.7 -647.7 508.5 -693.3Q577.3 -739 673 -739Q769.2 -739 838 -693.3Q906.8 -647.7 943.4 -563.5Q980 -479.2 980 -363Q980 -247.3 943.4 -163.1Q906.8 -78.8 838 -33.4Q769.2 12 673 12Z M673.2 -126Q717.6 -126 749.2 -154.5Q780.9 -183.1 798 -236.2Q815 -289.4 815 -363Q815 -437.1 798 -490.3Q780.9 -543.5 749 -572.2Q717.1 -601 673.2 -601Q629.9 -601 598 -572.2Q566.1 -543.5 549 -490.3Q532 -437.1 532 -363Q532 -289.4 549 -236.2Q566.1 -183.1 598 -154.5Q629.9 -126 673.2 -126Z"/></symbol>
+				<symbol id="dof-r-J" viewBox="25 -740 502 800" preserveAspectRatio="xMinYMin meet"><path fill="currentColor" d="M272.6 11Q155.4 11 90.2 -50.3Q25 -111.5 25 -225.8L25 -279L189 -279L189 -224.1Q189 -181 210.4 -158Q231.8 -135 270.2 -135Q308.2 -135 329.6 -158Q351 -180.9 351 -223.9L351 -727.5L527 -727.5L527 -221.3Q527 -109.5 460.1 -49.3Q393.2 11 272.6 11Z"/></symbol>
+				<symbol id="dof-r-Q" viewBox="25 -740 696 800" preserveAspectRatio="xMinYMin meet"><path fill="currentColor" d="M306.4 -258.6L445.9 -258.6L507.5 -180.5L583.7 -93.2L708.8 57.5L555.2 57.5L473.3 -44.4L415.7 -114.7L306.4 -258.6Z M373.2 12Q274.6 12 195.7 -32.6Q116.8 -77.2 70.9 -161.1Q25 -245 25 -362.5Q25 -481 70.9 -565.1Q116.8 -649.2 195.7 -693.6Q274.6 -738 373.2 -738Q471.9 -738 550.5 -693.6Q629.2 -649.2 675.1 -565.1Q721 -481 721 -362.5Q721 -244.5 675.1 -160.6Q629.2 -76.8 550.5 -32.4Q471.9 12 373.2 12Z M373.2 -141Q425.4 -141 463.7 -167.1Q502 -193.2 523 -242.7Q544 -292.2 544 -362.5Q544 -433.2 523 -483Q502 -532.8 463.7 -558.9Q425.4 -585 373.2 -585Q321.5 -585 283 -558.9Q244.4 -532.8 223.2 -483Q202 -433.2 202 -362.5Q202 -292.2 223.2 -242.7Q244.4 -193.2 283 -167.1Q321.5 -141 373.2 -141Z"/></symbol>
+				<symbol id="dof-r-K" viewBox="47 -740 656.5 800" preserveAspectRatio="xMinYMin meet"><path fill="currentColor" d="M175.6 -128.8L175.6 -344Q200 -374.7 224.9 -405.5Q249.8 -436.2 274.5 -466.7Q299.1 -497.2 324 -527.9L486.7 -727L693.2 -727L387.5 -363L372.4 -363L175.6 -128.8Z M47 0L47 -727L223 -727L223 -547.5L223 -351.3L223 -268.3L223 0L47 0Z M502.3 0L304.5 -311.8L410 -444L703.5 0L502.3 0Z"/></symbol>
+				<symbol id="dof-r-A" viewBox="2.6 -740 732.8 800" preserveAspectRatio="xMinYMin meet"><path fill="currentColor" d="M2.6 0L252.6 -727L484 -727L735.4 0L539.1 0L440.5 -319.5Q416.6 -399.5 393.2 -480.9Q369.7 -562.4 345.3 -657.5L392.7 -657.5Q367.3 -562.4 343.6 -480.9Q320 -399.5 295 -319.5L193.5 0L2.6 0Z M174 -140L174 -277L564 -277L564 -140L174 -140Z"/></symbol>
+				<symbol id="dof-heart" viewBox="0 0 100 92"><path fill="currentColor" d="M50 92C47 89 0 60 0 27.5C0 11.6 12.1 0 26.6 0C37 0 45.2 5.6 50 14.2C54.8 5.6 63 0 73.4 0C87.9 0 100 11.6 100 27.5C100 60 53 89 50 92Z"/></symbol>
+				<symbol id="dof-back" viewBox="0 0 50 70" preserveAspectRatio="none">
+					<rect width="50" height="70" fill="url(#dof-back-g)"/>
+					<rect x="3.6" y="3.6" width="42.8" height="62.8" rx="3.4" fill="url(#dof-back-p)" stroke="#fff" stroke-opacity=".6" stroke-width="1"/>
+					<path d="M25 21.5L35.5 35L25 48.5L14.5 35Z" fill="#fbf3e4"/>
+					<path d="M25 28.6L30 35L25 41.4L20 35Z" fill="#a1237a"/>
+				</symbol>
+			</defs>
+		</svg>
+
+		<div id="status" role="region" aria-label="Deck of Fools">
+			<div class="dof-half left" aria-hidden="true">
+				<div class="dof-art arl"><img src="keyart/z_arlecchino.webp" alt="" decoding="async" fetchpriority="high"></div>
+				<div class="dof-green"></div>
+			</div>
+			<div class="dof-half right" aria-hidden="true">
+				<div class="dof-art zan"><img src="keyart/z_zanni.webp" alt="" decoding="async" fetchpriority="high"></div>
+				<div class="dof-green"></div>
+			</div>
+			<div class="dof-centre">
+				<svg class="dof-title" viewBox="39 -728 6111 741" role="img" aria-label="Deck of Fools"><use href="#dof-wordmark"/></svg>
+				<p class="dof-tagline">A troupe of Jesters against the house</p>
+				<div class="dof-hand" role="progressbar" aria-label="Loading the game" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+					<div class="dof-slot" style="--i:0"><div class="dof-card"><div class="dof-flip">
+						<div class="dof-face dof-back"><svg viewBox="0 0 50 70" preserveAspectRatio="none"><use href="#dof-back"/></svg></div>
+						<div class="dof-face dof-front"><svg class="rank"><use href="#dof-r-10"/></svg><svg class="pip"><use href="#dof-heart"/></svg><svg class="big"><use href="#dof-heart"/></svg></div>
+					</div></div></div>
+					<div class="dof-slot" style="--i:1"><div class="dof-card"><div class="dof-flip">
+						<div class="dof-face dof-back"><svg viewBox="0 0 50 70" preserveAspectRatio="none"><use href="#dof-back"/></svg></div>
+						<div class="dof-face dof-front"><svg class="rank"><use href="#dof-r-J"/></svg><svg class="pip"><use href="#dof-heart"/></svg><svg class="big"><use href="#dof-heart"/></svg></div>
+					</div></div></div>
+					<div class="dof-slot" style="--i:2"><div class="dof-card"><div class="dof-flip">
+						<div class="dof-face dof-back"><svg viewBox="0 0 50 70" preserveAspectRatio="none"><use href="#dof-back"/></svg></div>
+						<div class="dof-face dof-front"><svg class="rank"><use href="#dof-r-Q"/></svg><svg class="pip"><use href="#dof-heart"/></svg><svg class="big"><use href="#dof-heart"/></svg></div>
+					</div></div></div>
+					<div class="dof-slot" style="--i:3"><div class="dof-card"><div class="dof-flip">
+						<div class="dof-face dof-back"><svg viewBox="0 0 50 70" preserveAspectRatio="none"><use href="#dof-back"/></svg></div>
+						<div class="dof-face dof-front"><svg class="rank"><use href="#dof-r-K"/></svg><svg class="pip"><use href="#dof-heart"/></svg><svg class="big"><use href="#dof-heart"/></svg></div>
+					</div></div></div>
+					<div class="dof-slot" style="--i:4"><div class="dof-card"><div class="dof-flip">
+						<div class="dof-face dof-back"><svg viewBox="0 0 50 70" preserveAspectRatio="none"><use href="#dof-back"/></svg></div>
+						<div class="dof-face dof-front"><svg class="rank"><use href="#dof-r-A"/></svg><svg class="pip"><use href="#dof-heart"/></svg><svg class="big"><use href="#dof-heart"/></svg></div>
+					</div></div></div>
+				</div>
+				<div class="dof-status" aria-live="polite">Shuffling the deck</div>
+				<p class="dof-notice" role="alert"></p>
+				<div class="dof-go">
+					<button class="dof-play" type="button">Play</button>
+					<button class="dof-alt" type="button" hidden>Main menu</button>
+				</div>
+				<p class="dof-tip"></p>
+			</div>
 		</div>
 
 		<div id="rotate-hint" class="dof-layer" role="alert"><div class="phone" aria-hidden="true"></div><div>Turn your phone sideways to play</div></div>
@@ -298,57 +359,176 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 
 		<script src="$GODOT_URL"></script>
 		<script>
+/* The start screen's controller. The engine code below drives it (dofStart.progress,
+   ready, fail). The game can ask window.dofStartScreen() where it is ("loading",
+   "ready", "closed", "error"), read window.dofStartChoice ("play" or "continue", empty
+   until the player chooses) or listen for the "dofstart" event on window, which carries
+   the same choice in event.detail.choice. The game saves what "Continue" offers in
+   localStorage "dof-status" (game/ui/web_status.gd). */
+const dofStart = (function () {
+	const root = document.getElementById('status');
+	const hand = root.querySelector('.dof-hand');
+	const slots = Array.from(hand.querySelectorAll('.dof-slot'));
+	const status = root.querySelector('.dof-status');
+	const notice = root.querySelector('.dof-notice');
+	const play = root.querySelector('.dof-play');
+	const alt = root.querySelector('.dof-alt');
+	const tip = root.querySelector('.dof-tip');
+	const still = window.matchMedia('(prefers-reduced-motion: reduce)');
+	let phase = 'loading';
+	let faceUp = 0;
+	let wanted = 0;
+	let turning = false;
+	window.dofStartScreen = function () { return phase; };
+	window.dofStartChoice = '';
+
+	let saved = null;
+	try {
+		saved = JSON.parse(localStorage.getItem('dof-status') || 'null');
+	} catch (e) {
+		saved = null;
+	}
+	const resume = saved && typeof saved.continue === 'string' && saved.continue !== '' ? saved.continue : '';
+
+	const tips = [
+		'Hold any card to read what it does.',
+		'Flushes and straights score far more than pairs.',
+		'Jesters work left to right: drag them to change the order.',
+		'Skip a Matinee or Evening show to take its Favor instead.',
+		'Unused hands pay extra ducats when you win a show.',
+		'The daily run deals the same cards to everyone.',
+	];
+	let tipIndex = Math.floor(Math.random() * tips.length);
+	tip.textContent = tips[tipIndex];
+	const tipTimer = setInterval(function () {
+		if (phase !== 'loading') {
+			clearInterval(tipTimer);
+			return;
+		}
+		tipIndex = (tipIndex + 1) % tips.length;
+		tip.style.opacity = '0';
+		setTimeout(function () { tip.textContent = tips[tipIndex]; tip.style.opacity = ''; }, still.matches ? 0 : 400);
+	}, 5500);
+
+	// Deal the hand face down as soon as the page is up.
+	requestAnimationFrame(function () { requestAnimationFrame(function () { hand.classList.add('dealt'); }); });
+
+	// Cards turn over one at a time, a beat apart, even when the download is quick.
+	function turn(count) {
+		wanted = Math.max(wanted, Math.min(5, count));
+		if (turning || faceUp >= wanted) return;
+		turning = true;
+		slots[faceUp].classList.add('up');
+		faceUp += 1;
+		setTimeout(function () { turning = false; turn(0); }, still.matches ? 0 : 140);
+	}
+
+	function progress(current, total) {
+		if (phase !== 'loading' || !(current > 0 && total > 0)) return;
+		const share = Math.min(1, current / total);
+		hand.setAttribute('aria-valuenow', String(Math.floor(share * 100)));
+		// Four cards follow the download; the Ace waits for the game to start.
+		turn(Math.min(4, Math.floor(share * 5)));
+		status.textContent = share >= 1 ? 'Starting the show' : 'Loading ' + Math.floor(share * 100) + '%';
+	}
+
+	function ready() {
+		if (phase !== 'loading') return;
+		phase = 'ready';
+		hand.setAttribute('aria-valuenow', '100');
+		turn(5);
+		if (resume) {
+			play.textContent = 'Continue the tour';
+			const where = document.createElement('small');
+			where.textContent = resume;
+			play.appendChild(where);
+			alt.hidden = false;
+		}
+		const show = function () {
+			if (faceUp < 5 || turning) {
+				setTimeout(show, 60);
+				return;
+			}
+			setTimeout(function () {
+				status.textContent = 'Royal flush';
+				root.classList.add('ready');
+				play.focus({ preventScroll: true });
+				// The gallery (tests/preview.gd, ?screen=...) starts straight away.
+				if (/[?&]screen=/.test(location.search)) choose('play');
+			}, still.matches ? 0 : 280);
+		};
+		show();
+	}
+
+	function choose(choice) {
+		if (phase !== 'ready') return;
+		phase = 'closed';
+		window.dofStartChoice = choice;
+		root.setAttribute('aria-hidden', 'true');
+		try {
+			window.dispatchEvent(new CustomEvent('dofstart', { detail: { choice: choice } }));
+		} catch (e) {
+			// No CustomEvent: the game can still read window.dofStartChoice.
+		}
+		const canvas = document.getElementById('canvas');
+		const finish = function () {
+			root.remove();
+			if (canvas) canvas.focus();
+		};
+		if (still.matches) {
+			root.classList.add('fading');
+			setTimeout(finish, 240);
+			return;
+		}
+		// A frame for the game to switch screens under the curtain, then it parts.
+		setTimeout(function () {
+			root.classList.add('parting');
+			setTimeout(finish, 800);
+		}, 90);
+	}
+
+	play.addEventListener('click', function (e) {
+		e.stopPropagation();
+		choose(resume ? 'continue' : 'play');
+	});
+	alt.addEventListener('click', function (e) {
+		e.stopPropagation();
+		choose('play');
+	});
+	// Once the game is ready, a tap anywhere on the card does what the big button does.
+	root.addEventListener('click', function () {
+		if (phase === 'ready') choose(resume ? 'continue' : 'play');
+	});
+
+	// A failure stays on screen with its reason. A download or start-up failure gets a
+	// "Try again" (a reload); a missing browser feature doesn't, as a reload can't help.
+	function fail(text, canRetry) {
+		phase = 'error';
+		clearInterval(tipTimer);
+		root.classList.remove('ready');
+		root.classList.add('failed');
+		notice.textContent = text;
+		if (canRetry) {
+			const again = document.createElement('button');
+			again.type = 'button';
+			again.className = 'dof-play dof-retry';
+			again.textContent = 'Try again';
+			again.addEventListener('click', function (e) {
+				e.stopPropagation();
+				location.reload();
+			});
+			notice.after(again);
+		}
+	}
+
+	return { progress: progress, ready: ready, fail: fail };
+}());
+
 const GODOT_CONFIG = $GODOT_CONFIG;
 const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 const engine = new Engine(GODOT_CONFIG);
 
 (function () {
-	const statusOverlay = document.getElementById('status');
-	const statusProgress = document.getElementById('status-progress');
-	const statusNotice = document.getElementById('status-notice');
-
-	let initializing = true;
-	let statusMode = '';
-
-	function setStatusMode(mode) {
-		if (statusMode === mode || !initializing) {
-			return;
-		}
-		if (mode === 'hidden') {
-			statusOverlay.remove();
-			initializing = false;
-			return;
-		}
-		statusOverlay.style.visibility = 'visible';
-		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
-		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
-		statusMode = mode;
-	}
-
-	function setStatusNotice(text) {
-		while (statusNotice.lastChild) {
-			statusNotice.removeChild(statusNotice.lastChild);
-		}
-		const lines = text.split('\n');
-		lines.forEach((line) => {
-			statusNotice.appendChild(document.createTextNode(line));
-			statusNotice.appendChild(document.createElement('br'));
-		});
-	}
-
-	function displayFailureNotice(err) {
-		console.error(err);
-		if (err instanceof Error) {
-			setStatusNotice(err.message);
-		} else if (typeof err === 'string') {
-			setStatusNotice(err);
-		} else {
-			setStatusNotice('An unknown error occurred.');
-		}
-		setStatusMode('notice');
-		initializing = false;
-	}
-
 	const missing = Engine.getMissingFeatures({
 		threads: GODOT_THREADS_ENABLED,
 	});
@@ -378,51 +558,21 @@ const engine = new Engine(GODOT_CONFIG);
 				window.location.reload();
 			}).catch((err) => {
 				console.error('Error while registering service worker:', err);
+				dofStart.fail('This browser can\'t run Deck of Fools. It needs ' + missing.map((m) => String(m).split(' - ')[0]).join(', ') + '. The latest Safari, Chrome, Edge or Firefox will play it.', false);
 			});
 		} else {
-			// Display the message as usual
-			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
-			displayFailureNotice(missingMsg + missing.join('\n'));
+			dofStart.fail('This browser can\'t run Deck of Fools. It needs ' + missing.map((m) => String(m).split(' - ')[0]).join(', ') + '. The latest Safari, Chrome, Edge or Firefox will play it.', false);
 		}
 	} else {
-		setStatusMode('progress');
-		// A percentage and a rotating tip under the bar while the game downloads.
-		const caption = document.getElementById('status-caption');
-		const pct = caption.querySelector('.pct');
-		const tip = caption.querySelector('.tip');
-		const tips = [
-			'Hold any card to read what it does.',
-			'Flushes and straights score far more than pairs.',
-			'Jesters work left to right: drag them to change the order.',
-			'Skip a Matinee or Evening show to take its Favor instead.',
-			'Unused hands pay extra ducats when you win a show.',
-			'The daily run deals the same cards to everyone.',
-		];
-		let tipIndex = Math.floor(Math.random() * tips.length);
-		tip.textContent = tips[tipIndex];
-		const tipTimer = setInterval(() => {
-			tipIndex = (tipIndex + 1) % tips.length;
-			tip.style.opacity = '0';
-			setTimeout(() => { tip.textContent = tips[tipIndex]; tip.style.opacity = '1'; }, 350);
-		}, 4000);
 		engine.startGame({
 			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-					pct.textContent = current >= total ? 'Raising the curtain…' : 'Setting the stage… ' + Math.floor(100 * current / total) + '%';
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
-				}
+				dofStart.progress(current, total);
 			},
 		}).then(() => {
-			clearInterval(tipTimer);
-			setStatusMode('hidden');
+			dofStart.ready();
 		}, (err) => {
-			clearInterval(tipTimer);
-			caption.style.display = 'none';
-			displayFailureNotice(err);
+			console.error(err);
+			dofStart.fail('The game didn\'t finish loading. Check your connection, then try again.', true);
 		});
 	}
 }());

@@ -76,6 +76,11 @@ static func money_value(diamonds: int) -> String:
 	return "about $%.2f" % (diamonds / 100.0 * USD_PER_100_DIAMONDS)
 
 
+## The same worth, short enough for the narrow card-back tiles ("≈$2.97").
+static func money_value_short(diamonds: int) -> String:
+	return "≈$%.2f" % (diamonds / 100.0 * USD_PER_100_DIAMONDS)
+
+
 ## The wallet id that owns card back `index`, or "" when the back is free.
 static func back_id(index: int) -> String:
 	for entry: Dictionary in ITEMS:

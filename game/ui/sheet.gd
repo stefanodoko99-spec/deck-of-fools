@@ -53,13 +53,18 @@ func _ready() -> void:
 	_build()
 	heading.text = title_text
 	# Slide up and fade in, like a system sheet.
+	# Only the vertical offsets move: setting position would rewrite the horizontal ones
+	# from the panel's size at that moment, and a briefly wider layout would stick.
 	if not Settings.reduce_motion:
-		var rest := panel.position
-		panel.position = rest + Vector2(0, 26)
+		var top_rest := panel.offset_top
+		var bottom_rest := panel.offset_bottom
+		panel.offset_top = top_rest + 26
+		panel.offset_bottom = bottom_rest + 26
 		panel.modulate.a = 0.0
 		shade.modulate.a = 0.0
 		var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-		tween.tween_property(panel, "position", rest, 0.26)
+		tween.tween_property(panel, "offset_top", top_rest, 0.26)
+		tween.tween_property(panel, "offset_bottom", bottom_rest, 0.26)
 		tween.tween_property(panel, "modulate:a", 1.0, 0.18)
 		tween.tween_property(shade, "modulate:a", 1.0, 0.2)
 

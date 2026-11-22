@@ -96,5 +96,16 @@ replaceOnce(
   "full cache check",
 );
 
+// The site serves the game at "/" as well as at index.html, but the cache only knows
+// index.html: offline, a visit to "/" would fail. Answer it from the cached page.
+replaceOnce(
+  "let cached = await cache.match(event.request);",
+  `let cached = await cache.match(event.request);
+				if (cached == null && isNavigate && new URL(url).pathname.endsWith('/')) {
+					cached = await cache.match(CACHED_FILES[0]);
+				}`,
+  "cache lookup in fetch",
+);
+
 writeFileSync(file, src);
 console.log(`patched ${file}: engine cache ${hash}, music cache ${musicHash}`);
