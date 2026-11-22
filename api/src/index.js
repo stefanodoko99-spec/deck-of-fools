@@ -286,10 +286,22 @@ var resetPage = /* @__PURE__ */ __name((token) => page("Deck of Fools: new passw
 
 // src/index.js
 var EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// New sign-ups take plain addresses only: letters, digits and . _ % + - (after lower-casing).
+// Quotes, semicolons, brackets, $ and backticks are valid in an address but could carry SQL
+// or shell text into a support lookup (docs/LIVE_OPS.md); existing accounts still log in.
+var NEW_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.([a-z]{2,}|xn--[a-z0-9-]+)$/;
 var NAME = /^[\p{L}\p{N} _.'-]{2,20}$/u;
 var TOKEN = /^[A-Za-z0-9_-]{20,100}$/;
 var MAX_SAVE = 1e6;
 var LEADERBOARD_SIZE = 50;
+var NEWS_SIZE = 20;
+var LETTERS_SIZE = 50;
+var LETTER_ID = /^[1-9]\d{0,11}$/;
+var CLAIM_KEY = /^[A-Za-z0-9_-]{8,64}$/;
+// The same rule as the news table's CHECK and the game's PlaybillSheet.is_web_link: an https
+// link of 12 to 300 characters without spaces, tabs, line breaks, quotes or < >.
+var NEWS_ACTION = /^(shop|collection|daily|https:\/\/[^\t\n\v\f\r "'<>]{4,292})$/;
+var NEWS_COLOUR = /^(gold|orange|red|pink|purple|blue|teal|green|#[0-9a-fA-F]{6})$/;
 var index_default = {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -365,10 +377,16 @@ async function route(request, env) {
       return bestHandBoard(request, env);
     case "GET /v1/leaderboards/town":
       return townBoard(request, env, url);
+    case "GET /v1/news":
+      return news(request, env);
+    case "GET /v1/letters":
+      return letters(request, env);
     case "GET /v1/dev/outbox":
       if (env.DEV_MAIL !== "1") break;
       return json({ emails: (await db.prepare("SELECT * FROM outbox ORDER BY id DESC LIMIT 20").all()).results });
   }
+  const claim = method === "POST" ? path.match(/^\/v1\/letters\/([^/]+)\/claim$/) : null;
+  if (claim) return claimLetter(request, env, claim[1]);
   throw new HttpError(404, "Not found.");
 }
 __name(route, "route");
@@ -401,9 +419,10 @@ async function guest(request, env) {
   return json(await signedIn(env, { id }), 201);
 }
 __name(guest, "guest");
-function cleanEmail(value) {
+function cleanEmail(value, fresh = false) {
   const email = String(value || "").trim().toLowerCase();
   if (email.length > 254 || !EMAIL.test(email)) throw new HttpError(400, "Enter a valid email address.");
+  if (fresh && !NEW_EMAIL.test(email)) throw new HttpError(400, "Use an email address made of letters, numbers and the marks . _ % + - only.");
   return email;
 }
 __name(cleanEmail, "cleanEmail");
@@ -422,7 +441,7 @@ function cleanName(value) {
 __name(cleanName, "cleanName");
 async function signup(request, env) {
   const data = await body(request);
-  const email = cleanEmail(data.email);
+  const email = cleanEmail(data.email, true);
   const password = cleanPassword(data.password);
   const name = cleanName(data.name);
   const db = env.DB;
@@ -529,6 +548,8 @@ async function rename(request, env) {
   return json({ user: publicUser({ ...user, name }) });
 }
 __name(rename, "rename");
+// The player's claims and personal letters (migration 0002) go with the users row through
+// ON DELETE CASCADE, so deleting an account doesn't depend on that migration being applied.
 async function deleteAccount(request, env) {
   const user = await requireUser(env.DB, request);
   await env.DB.batch(["daily", "runs", "saves", "tokens", "sessions"].map((table) => env.DB.prepare(`DELETE FROM ${table} WHERE user_id = ?`).bind(user.id)).concat([env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id)]));
@@ -670,6 +691,97 @@ async function stats(request, env) {
   return json({ ...totals, per_deck: perDeck, favourite_jester: favourite ? favourite[0] : null });
 }
 __name(stats, "stats");
+// The Playbill (GET /v1/news) is public and the same for everyone, like the leaderboards.
+// A one-minute copy kept in this isolate answers most calls, and the per-isolate counter
+// turns away a client that hammers it; the D1 limiter would cost a write on every call.
+// The copy looks an hour ahead, so items still start and end on the second.
+// An ends_at of 0 means the item stays up (the table refuses NULL and text times).
+var newsCopy = { at: -Infinity, rows: [] };
+var newsHits = /* @__PURE__ */ new Map();
+async function news(request, env) {
+  const t = now();
+  if (!newsAllowed(ip(request), t)) throw new HttpError(429, "Too many requests. Try again in a few minutes.");
+  const ttl = Number(env.NEWS_CACHE_SECONDS ?? 60);
+  if (!(t - newsCopy.at < ttl)) {
+    const rows = (await env.DB.prepare("SELECT id, kind, title, body, colour, action, version, starts_at, ends_at FROM news WHERE starts_at <= ? AND (ends_at = 0 OR ends_at > ?) ORDER BY starts_at DESC, id DESC LIMIT 60").bind(t + 3600, t).all()).results;
+    newsCopy = { at: t, rows };
+  }
+  const items = newsCopy.rows.filter((n) => n.starts_at <= t && (n.ends_at === 0 || n.ends_at > t)).slice(0, NEWS_SIZE).map(cleanNews);
+  return json({ news: items, time: t });
+}
+__name(news, "news");
+function newsAllowed(address, t) {
+  const hit = newsHits.get(address);
+  if (!hit || t - hit.start >= 600) {
+    if (newsHits.size >= 1e4) newsHits.clear();
+    newsHits.set(address, { start: t, count: 1 });
+    return true;
+  }
+  hit.count += 1;
+  return hit.count <= 60;
+}
+__name(newsAllowed, "newsAllowed");
+function cleanNews(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: cut(row.title, 80),
+    body: cut(row.body, 600),
+    colour: NEWS_COLOUR.test(row.colour || "") ? row.colour : "",
+    action: NEWS_ACTION.test(row.action || "") ? row.action : "",
+    version: cut(row.version, 20),
+    starts_at: row.starts_at,
+    ends_at: row.ends_at || 0
+  };
+}
+__name(cleanNews, "cleanNews");
+// At most `limit` characters as the database counts them (code points, so an emoji is one
+// and is never cut in half).
+function cut(text, limit) {
+  return Array.from(String(text || "")).slice(0, limit).join("");
+}
+__name(cut, "cut");
+// The inbox: letters for this player or for everyone, delivered (created_at reached) and not
+// expired (an expires_at of 0 never expires), newest first, each saying whether this account
+// has claimed it.
+async function letters(request, env) {
+  const user = await requireUser(env.DB, request);
+  if (!await allow(env.DB, `letters:${user.id}`, 120, 3600)) throw new HttpError(429, "Too many requests. Try again later.");
+  const t = now();
+  const rows = (await env.DB.prepare("SELECT l.id, l.title, l.body, l.coins, l.created_at, l.expires_at, l.user_id IS NOT NULL AS personal, c.letter_id IS NOT NULL AS claimed FROM letters l LEFT JOIN letter_claims c ON c.letter_id = l.id AND c.user_id = ?1 WHERE (l.user_id IS NULL OR l.user_id = ?1) AND l.created_at <= ?2 AND (l.expires_at = 0 OR l.expires_at > ?2) ORDER BY l.created_at DESC, l.id DESC LIMIT ?3").bind(user.id, t, LETTERS_SIZE).all()).results;
+  return json({ letters: rows.map((row) => ({ ...row, personal: Boolean(row.personal), claimed: Boolean(row.claimed) })), time: t });
+}
+__name(letters, "letters");
+// Claiming is idempotent: the first call answers { coins } and every later call
+// { coins: 0, already: true }, so coins are paid once per account however often it is sent.
+// A call may carry a key; repeating the key of the call that claimed the letter (its answer
+// was lost on the way) gets { coins, repeat: true }, and the game pays only if it hasn't yet.
+// A letter claimed in time stays claimed after it expires.
+async function claimLetter(request, env, idText) {
+  if (!LETTER_ID.test(idText)) throw new HttpError(400, "That isn't a letter.");
+  const db = env.DB;
+  const user = await requireUser(db, request);
+  const data = await body(request, 2e3);
+  const claimKey = data.key === void 0 || data.key === null ? "" : data.key;
+  if (claimKey !== "" && (typeof claimKey !== "string" || !CLAIM_KEY.test(claimKey))) throw new HttpError(400, "That claim doesn't look right.");
+  if (!await allow(db, `claim:${user.id}`, 60, 3600)) throw new HttpError(429, "Too many claims. Try again later.");
+  const id = Number(idText);
+  const t = now();
+  const letter = await db.prepare("SELECT coins, created_at, expires_at FROM letters WHERE id = ? AND (user_id IS NULL OR user_id = ?)").bind(id, user.id).first();
+  if (!letter || letter.created_at > t) throw new HttpError(404, "That letter isn't in your inbox.");
+  const findClaim = /* @__PURE__ */ __name(() => db.prepare("SELECT claim_key FROM letter_claims WHERE letter_id = ? AND user_id = ?").bind(id, user.id).first(), "findClaim");
+  const earlier = await findClaim();
+  if (earlier) return json(claimedAgain(letter, earlier, claimKey));
+  if (letter.expires_at > 0 && letter.expires_at <= t) throw new HttpError(410, "That letter has expired.");
+  const result = await db.prepare("INSERT OR IGNORE INTO letter_claims (letter_id, user_id, claimed_at, claim_key) VALUES (?, ?, ?, ?)").bind(id, user.id, t, claimKey).run();
+  if (!result.meta.changes) return json(claimedAgain(letter, await findClaim() || {}, claimKey));
+  return json({ coins: letter.coins });
+}
+__name(claimLetter, "claimLetter");
+function claimedAgain(letter, claim, claimKey) {
+  return claimKey && claim.claim_key === claimKey ? { coins: letter.coins, repeat: true } : { coins: 0, already: true };
+}
+__name(claimedAgain, "claimedAgain");
 export {
   index_default as default
 };
