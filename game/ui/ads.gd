@@ -2,8 +2,7 @@ extends Node
 ## Ads, shown through a provider at the moments AdPolicy allows. Two kinds:
 ## - rewarded ads the player chooses ("encore", "double_coins", "daily_gift"): call
 ##   can_offer() to decide whether to show the button, then show_rewarded(), which
-##   returns true only when the reward is due (the ad played to the end, or the
-##   player owns No intermissions, which grants these rewards with one tap);
+##   returns true only when the ad played to the end and the reward is due;
 ## - intermissions at natural breaks ("town_break", "run_end"): call intermission(),
 ##   which does nothing unless every rule allows one right now.
 ## While an ad plays the game's sound is muted. In "test" mode the provider is
@@ -26,9 +25,26 @@ var _token := 0
 var _playing := false
 
 
+## A "session" restarts after this long in the background (iOS and the installed web
+## app keep the process alive for days).
+const SESSION_GAP := 1800.0
+var _left_at := -1.0
+
+
 func _ready() -> void:
 	mode = Monetization.mode()
 	_session_start = now()
+
+
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			_left_at = now()
+		NOTIFICATION_APPLICATION_RESUMED, NOTIFICATION_APPLICATION_FOCUS_IN:
+			if _left_at >= 0.0 and now() - _left_at > SESSION_GAP:
+				_session_start = now()
+				_intermissions_session = 0
+			_left_at = -1.0
 
 
 func now() -> float:
@@ -59,18 +75,11 @@ func can_offer(placement: String, context := {}) -> bool:
 	return not _playing and AdPolicy.check(placement, snapshot(context)) == ""
 
 
-## True when the player owns No intermissions: rewarded choices then skip the ad.
-func ad_free() -> bool:
-	return Game.wallet().owns("remove_ads")
-
-
 ## Play a rewarded ad. True when the reward is due.
 func show_rewarded(placement: String, context := {}) -> bool:
 	if not can_offer(placement, context):
 		return false
-	var completed := true
-	if not ad_free():
-		completed = await _play(placement, true)
+	var completed: bool = await _play(placement, true)
 	if completed:
 		_last_rewarded = now()
 		Game.wallet().rewarded_today += 1

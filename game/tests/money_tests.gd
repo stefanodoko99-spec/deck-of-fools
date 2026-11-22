@@ -148,7 +148,9 @@ func _catalog() -> void:
 	eq(ShopCatalog.buy("back_opera_night", w), "", "buy a back with diamonds")
 	eq(w.diamonds, 0, "diamonds paid")
 	eq(ShopCatalog.deliver("dof.diamonds.500", w), "", "deliver diamonds")
-	eq(w.diamonds, 550, "diamond pack credited with its bonus")
+	eq(w.diamonds, 500, "diamond pack credited")
+	for pack: Dictionary in ShopCatalog.PRODUCTS:
+		eq(int(pack.get("diamonds", 0)) % 100, 0, "pack size leaves no leftovers: " + str(pack["id"]))
 	eq(ShopCatalog.deliver("dof.diamonds.500", w), "", "diamond packs can be bought again")
 	eq(ShopCatalog.deliver("dof.remove_ads", w), "", "No intermissions")
 	ok(w.owns("remove_ads"), "No intermissions owned")

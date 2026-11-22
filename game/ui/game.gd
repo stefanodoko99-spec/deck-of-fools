@@ -63,7 +63,10 @@ func new_run(deck_id: String, stake: int, challenge_id := "", seed := "", meta :
 	var deck := deck_id
 	if challenge_id != "":
 		deck = str(ContentDB.get_def(challenge_id).data["deck"])
-	run = RunState.create(seed if seed != "" else _random_seed(), deck, stake, challenge_id, profile.locked_cards(), str(meta.get("mode", "tour")))
+	# The daily run deals the same cards to everyone, so it doesn't depend on which
+	# Rare Jesters this player has unlocked: they are all left out of its Market.
+	var locked: Array = Unlocks.RARE_FEATS.keys() if meta.has("daily_date") else profile.locked_cards()
+	run = RunState.create(seed if seed != "" else _random_seed(), deck, stake, challenge_id, locked, str(meta.get("mode", "tour")))
 	run_meta = meta.duplicate()
 	recorded = false
 	win_seen = false
@@ -240,8 +243,8 @@ func _settle_lost_run() -> void:
 
 
 ## The daily gift: ready once a day (UTC, like the daily run). A clock set back
-## doesn't make it ready again. Claiming continues the streak if yesterday was claimed
-## too, otherwise it starts again at day 1. Returns the gift with its "day".
+## doesn't make it ready again. Each claim moves the 7-day calendar on one step; a
+## missed day doesn't reset it. Returns the gift with its "day" (1-7).
 func gift_ready() -> bool:
 	return wallet().gift_day < Economy.today()
 
@@ -251,24 +254,25 @@ func claim_gift() -> Dictionary:
 		return {}
 	var w := wallet()
 	var today := Economy.today()
-	w.gift_streak = w.gift_streak + 1 if Economy.is_next_day(w.gift_day, today) else 1
+	# The calendar moves on one step per claim; missing days doesn't reset it.
+	w.gift_streak += 1
 	w.gift_day = today
 	var gift := Economy.gift_for(w.gift_streak).duplicate()
-	gift["day"] = w.gift_streak
+	gift["day"] = posmod(w.gift_streak - 1, Economy.GIFTS.size()) + 1
 	w.earn("coins", int(gift.get("coins", 0)))
 	w.earn("diamonds", int(gift.get("diamonds", 0)))
 	save_profile()
 	return gift
 
 
-## Pay a claimed gift once more (after a rewarded ad). Only today's gift, only once.
+## Pay a claimed gift's coins once more (after a rewarded ad). Only today's gift, only
+## once, and only the coins: an ad never pays out diamonds.
 func double_gift(gift: Dictionary) -> bool:
 	var w := wallet()
 	if w.gift_day != Economy.today() or w.gift_doubled_day == w.gift_day:
 		return false
 	w.gift_doubled_day = w.gift_day
 	w.earn("coins", int(gift.get("coins", 0)))
-	w.earn("diamonds", int(gift.get("diamonds", 0)))
 	save_profile()
 	return true
 

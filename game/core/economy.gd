@@ -30,7 +30,8 @@ const ALBUM_STEP := 25
 const ALBUM_COINS := 250
 const ALBUM_DIAMONDS := 20
 
-## The daily gift, one step per consecutive day; after day 7 it starts again at day 1.
+## The daily gift calendar: one step per day the gift is claimed. Missing a day only
+## pauses it (nothing is lost for not coming back); after day 7 it starts at day 1.
 const GIFTS := [
 	{ "coins": 30 },
 	{ "coins": 40 },
@@ -42,10 +43,11 @@ const GIFTS := [
 ]
 
 ## The Encore: after losing a show, play on with extra hands and discards, once per
-## run. Paid with a rewarded ad or coins, never with money at that frustrating moment.
+## run. Paid with a rewarded ad or coins (less than one won quick run pays), never
+## with money at that frustrating moment.
 const ENCORE_HANDS := 1
 const ENCORE_DISCARDS := 1
-const ENCORE_COINS := 150
+const ENCORE_COINS := 100
 
 
 static func coins_for_show(show_index: int, town: int) -> int:

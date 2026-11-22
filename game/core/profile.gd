@@ -39,7 +39,9 @@ func record_run(run: RunState) -> void:
 	for f in run.feats:
 		feats[f] = true
 	signs_used += int(run.counters.get("used_sign", 0))
-	runs_played += 1
+	# Runs abandoned before a single hand don't count as experience.
+	if int(run.counters.get("hands_played", 0)) > 0:
+		runs_played += 1
 	var held := {}
 	for z in run.zanni:
 		held[z.def_id] = true

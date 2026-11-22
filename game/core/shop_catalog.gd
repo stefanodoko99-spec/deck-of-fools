@@ -9,9 +9,11 @@ extends RefCounted
 ## - nothing is random, so there are no odds to disclose;
 ## - nothing sold touches a run: diamonds buy cosmetics only;
 ## - coins are never sold or exchanged for diamonds;
-## - diamond prices are multiples of 100, and 100 diamonds cost $0.99 at the base
-##   rate, so every price can show its real-money value and packs leave no odd
-##   leftovers.
+## - diamond prices and pack sizes are multiples of 100, and 100 diamonds cost $0.99
+##   at the base rate, so every price can show its real-money value and no pack
+##   leaves diamonds that nothing can use;
+## - No intermissions removes ad breaks only: it never turns a rewarded ad into a free
+##   reward, which would sell coins or Encores for money.
 
 ## 100 diamonds = this many US dollars at the base rate (the smallest pack, no bonus).
 const USD_PER_100_DIAMONDS := 0.99
@@ -36,17 +38,17 @@ const PRODUCTS := [
 		"diamonds": 300, "grant": ["back_starter_crest"],
 		"text": "300 diamonds and the Starter's crest card back, sold only here. Once per player." },
 	{ "id": "dof.remove_ads", "kind": "unlock", "name": "No intermissions", "usd": 3.99, "once": true, "grant": ["remove_ads"],
-		"text": "No ad breaks, ever. Rewards you'd watch an ad for (an Encore, double coins, double gift) are yours with one tap." },
+		"text": "No more ad breaks between towns or after runs. Optional rewarded ads stay your choice." },
 	{ "id": "dof.diamonds.100", "kind": "diamonds", "name": "Handful of diamonds", "usd": 0.99, "diamonds": 100,
 		"text": "100 diamonds." },
-	{ "id": "dof.diamonds.500", "kind": "diamonds", "name": "Pouch of diamonds", "usd": 4.99, "diamonds": 550,
-		"text": "500 diamonds + 50 bonus." },
-	{ "id": "dof.diamonds.1000", "kind": "diamonds", "name": "Box of diamonds", "usd": 9.99, "diamonds": 1150,
-		"text": "1,000 diamonds + 150 bonus." },
-	{ "id": "dof.diamonds.2000", "kind": "diamonds", "name": "Casket of diamonds", "usd": 19.99, "diamonds": 2400,
-		"text": "2,000 diamonds + 400 bonus." },
-	{ "id": "dof.diamonds.5000", "kind": "diamonds", "name": "Treasury of diamonds", "usd": 49.99, "diamonds": 6250,
-		"text": "5,000 diamonds + 1,250 bonus." },
+	{ "id": "dof.diamonds.500", "kind": "diamonds", "name": "Pouch of diamonds", "usd": 4.99, "diamonds": 500,
+		"text": "500 diamonds." },
+	{ "id": "dof.diamonds.1000", "kind": "diamonds", "name": "Box of diamonds", "usd": 9.99, "diamonds": 1100,
+		"text": "1,000 diamonds + 100 bonus." },
+	{ "id": "dof.diamonds.2000", "kind": "diamonds", "name": "Casket of diamonds", "usd": 19.99, "diamonds": 2300,
+		"text": "2,000 diamonds + 300 bonus." },
+	{ "id": "dof.diamonds.5000", "kind": "diamonds", "name": "Treasury of diamonds", "usd": 49.99, "diamonds": 6000,
+		"text": "5,000 diamonds + 1,000 bonus." },
 ]
 
 ## Card backs that are never sold on their own (they come in a bundle).
