@@ -1576,7 +1576,9 @@ func _end_stats(r: RunState) -> GridContainer:
 		if r.hand_levels.times_played(hand_type) > (r.hand_levels.times_played(most) if most != "" else 0):
 			most = hand_type
 	var stats := [
-		["Towns conquered", str(r.town - 1)] if r.won else ["Towns reached", str(r.town)],
+		# A town is conquered when its Patron falls (the win screen shows in the final
+		# town, so town - 1 would count one short).
+		["Towns conquered", str(int(r.counters.get("patrons_beaten", 0)))] if r.won else ["Towns reached", str(r.town)],
 		["Best hand", UiTheme.number(float(r.counters.get("best_hand", 0)))],
 		["Shows won", str(int(r.counters.get("shows_won", 0)))],
 		["Hands played", str(int(r.counters.get("hands_played", 0)))],

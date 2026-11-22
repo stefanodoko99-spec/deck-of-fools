@@ -12,8 +12,8 @@ extends Sheet
 ## so every button locks while one is pending, and every step after an await first
 ## checks that this sheet is still open.
 
-const TABS := ["featured", "backs", "items", "diamonds"]
-const TAB_NAMES := ["Featured", "Card backs", "Items", "Diamonds"]
+const TABS := ["featured", "backs", "diamonds"]
+const TAB_NAMES := ["Featured", "Card backs", "Diamonds"]
 ## A second tap this soon after the first is the same double tap, not a decision.
 const CONFIRM_MIN_MS := 350
 const BACK_COLUMNS := 6
@@ -112,8 +112,6 @@ func _build() -> void:
 			_build_featured(area)
 		"backs":
 			_build_backs(area)
-		"items":
-			_build_items(area)
 		_:
 			_build_diamonds(area)
 	# The footer: what just happened (or a hint for the tab), and Restore purchases.
@@ -144,7 +142,7 @@ func _build_featured(area: VBoxContainer) -> void:
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", 8)
 	area.add_child(row)
-	var wallet := Game.profile.wallet
+	var wallet := Game.wallet()
 	var tiles := 0
 	if not wallet.owns("dof.starter"):
 		row.add_child(_starter_tile())
@@ -157,7 +155,7 @@ func _build_featured(area: VBoxContainer) -> void:
 		row.add_child(_pick_tile(pick))
 		tiles += 1
 	# Once the offers are bought, the row still leads somewhere.
-	for target: String in ["backs", "items"]:
+	for target: String in ["backs", "diamonds"]:
 		if tiles < 3:
 			row.add_child(_promo_tile(target))
 			tiles += 1
@@ -240,7 +238,7 @@ func _promo_tile(target: String) -> Control:
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tile.col.add_theme_constant_override("separation", 4)
 	if target == "backs":
-		var open_count := range(back_count()).filter(func(i: int) -> bool: return ShopCatalog.back_unlocked(i, Game.profile.wallet)).size()
+		var open_count := range(back_count()).filter(func(i: int) -> bool: return ShopCatalog.back_unlocked(i, Game.wallet())).size()
 		tile.col.add_child(_tag("Card backs"))
 		tile.col.add_child(_centred(_back_fan()))
 		tile.col.add_child(UiTheme.title("Dress your deck", 13, UiTheme.TEXT))
@@ -248,13 +246,12 @@ func _promo_tile(target: String) -> Control:
 		tile.col.add_child(_gap())
 		tile.col.add_child(_small_button("Browse", _pick_tab.bind(1), 10, 22.0))
 	else:
-		var held := Game.profile.wallet.item_count("encore_ticket")
-		tile.col.add_child(_tag("Items"))
-		tile.col.add_child(_centred(ItemArt.new("ticket", 3, Vector2(64, 60))))
-		tile.col.add_child(UiTheme.title("Encore tickets", 13, UiTheme.TEXT))
-		tile.col.add_child(_wrap("You hold %d. One lets a lost show play on." % held, 8, UiTheme.MUTED, 120))
+		tile.col.add_child(_tag("Diamonds"))
+		tile.col.add_child(_centred(CurrencyIcon.new("diamonds", 44)))
+		tile.col.add_child(UiTheme.title("Rare card backs", 13, UiTheme.TEXT))
+		tile.col.add_child(_wrap("You hold %s diamonds. They buy looks, never an edge in a run." % UiTheme.number(Game.wallet().diamonds), 8, UiTheme.MUTED, 120))
 		tile.col.add_child(_gap())
-		tile.col.add_child(_small_button("See items", _pick_tab.bind(2), 10, 22.0))
+		tile.col.add_child(_small_button("See diamonds", _pick_tab.bind(TABS.find("diamonds")), 10, 22.0))
 	return tile
 
 
@@ -262,7 +259,7 @@ func _promo_tile(target: String) -> Control:
 func _back_fan() -> Control:
 	var wanted: Array[int] = []
 	for i: int in back_count():
-		if not ShopCatalog.back_unlocked(i, Game.profile.wallet):
+		if not ShopCatalog.back_unlocked(i, Game.wallet()):
 			wanted.append(i)
 	for i: int in back_count():
 		if wanted.size() >= 3:
@@ -298,7 +295,7 @@ func _build_backs(area: VBoxContainer) -> void:
 func _back_tile(index: int) -> Control:
 	var id := ShopCatalog.back_id(index)
 	var entry := ShopCatalog.item(id)
-	var unlocked := ShopCatalog.back_unlocked(index, Game.profile.wallet)
+	var unlocked := ShopCatalog.back_unlocked(index, Game.wallet())
 	var in_use := Settings.card_back == index
 	var tile := Tile.new(GLASS_TILE, 5.0)
 	tile.custom_minimum_size = BACK_TILE
@@ -358,69 +355,6 @@ func _in_use_pill() -> Control:
 
 
 # --- Items -----------------------------------------------------------------------
-
-
-func _build_items(area: VBoxContainer) -> void:
-	var held := Game.profile.wallet.item_count("encore_ticket")
-	var note := PanelContainer.new()
-	var box := UiTheme.box(Color(1, 1, 1, 0.06), UiTheme.TONAL_EDGE, 10)
-	box.content_margin_left = 8
-	note.add_theme_stylebox_override("panel", box)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	var art := ItemArt.new("ticket", 1, Vector2(20, 16))
-	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(art)
-	var count := UiTheme.label("You hold %d Encore ticket%s." % [held, "" if held == 1 else "s"], 9, UiTheme.TEXT)
-	count.add_theme_font_override("font", UiTheme.bold)
-	row.add_child(count)
-	var how := UiTheme.label("After losing a show, one lets you play on. The run is then unranked.", 9, UiTheme.MUTED)
-	how.clip_text = true
-	how.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	how.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(how)
-	note.add_child(row)
-	area.add_child(note)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	for entry: Dictionary in ShopCatalog.ITEMS:
-		if entry["kind"] != "card_back":
-			grid.add_child(_item_tile(entry))
-	area.add_child(grid)
-
-
-func _item_tile(entry: Dictionary) -> Control:
-	var tile := Tile.new(COINS if entry["kind"] == "coins" else ENCORE)
-	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var art := _art_for(entry, Vector2(50, 50))
-	art.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(art)
-	var lines := VBoxContainer.new()
-	lines.add_theme_constant_override("separation", 1)
-	lines.alignment = BoxContainer.ALIGNMENT_CENTER
-	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lines.add_child(UiTheme.title(str(entry["name"]), 12, UiTheme.TEXT))
-	lines.add_child(_wrap(str(entry["text"]), 8, UiTheme.TEXT, 130))
-	row.add_child(lines)
-	var buy := VBoxContainer.new()
-	buy.alignment = BoxContainer.ALIGNMENT_CENTER
-	buy.add_theme_constant_override("separation", 4)
-	buy.custom_minimum_size = Vector2(72, 0)
-	buy.add_child(_price(entry, 10, true))
-	buy.add_child(_buy_button(entry))
-	row.add_child(buy)
-	tile.col.add_child(row)
-	return tile
-
-
-# --- Diamonds --------------------------------------------------------------------
 
 
 func _build_diamonds(area: VBoxContainer) -> void:
@@ -498,7 +432,7 @@ func _buy(id: String) -> void:
 	if _store_busy != "":
 		return
 	var entry := ShopCatalog.item(id)
-	var wallet := Game.profile.wallet
+	var wallet := Game.wallet()
 	var reason := ShopCatalog.why_not(entry, wallet)
 	if reason != "":
 		_fail(reason)
@@ -533,7 +467,7 @@ func _bought_words(entry: Dictionary) -> String:
 			return "%s is yours. Tap Use to play with it." % entry["name"]
 		"coins":
 			return "Added %s coins." % UiTheme.number(int(entry["amount"]))
-	var held := Game.profile.wallet.item_count(str(entry.get("item", entry["id"])))
+	var held := Game.wallet().item_count(str(entry.get("item", entry["id"])))
 	return "Added %s. You hold %d." % [str(entry["name"]) if int(entry.get("count", 1)) > 1 else "an Encore ticket", held]
 
 
@@ -613,7 +547,7 @@ func _restore() -> void:
 
 
 func _use_back(index: int) -> void:
-	if Settings.card_back == index or not ShopCatalog.back_unlocked(index, Game.profile.wallet):
+	if Settings.card_back == index or not ShopCatalog.back_unlocked(index, Game.wallet()):
 		return
 	Settings.card_back = index
 	Settings.save()
@@ -686,9 +620,7 @@ func _hint() -> String:
 			return "Coins come from winning shows. Nothing here changes how a run plays."
 		"backs":
 			return "Card backs only change the look of your cards."
-		"items":
-			return "Diamonds buy Encore tickets and coins; tickets keep for later runs."
-	return "Diamonds buy Encore tickets, coins and rare card backs."
+	return "100 diamonds cost $0.99. They buy rare card backs, never an edge in a run."
 
 
 # --- The wallet in the header ----------------------------------------------------
@@ -724,7 +656,7 @@ func _add_wallet() -> void:
 
 ## Show the wallet's balances, counting to them from what was shown before.
 func _refresh_wallet(animate := true) -> void:
-	var w := Game.profile.wallet
+	var w := Game.wallet()
 	_count(_coins, _shown_coins, w.coins, animate)
 	_count(_diamonds, _shown_diamonds, w.diamonds, animate)
 	_shown_coins = w.coins
@@ -771,10 +703,15 @@ func _art_for(entry: Dictionary, art_size: Vector2) -> Control:
 
 ## The price of an item in coins or diamonds; red when the wallet is short (on glass).
 func _price(entry: Dictionary, font_size: int, on_colour: bool) -> Control:
-	var short := not Game.profile.wallet.can_afford(str(entry["currency"]), int(entry["price"]))
+	var short := not Game.wallet().can_afford(str(entry["currency"]), int(entry["price"]))
 	var colour := UiTheme.TEXT if on_colour or not short else UiTheme.MULT.lightened(0.35)
 	var row := UiTheme.currency(str(entry["currency"]), int(entry["price"]), font_size, colour)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	# Diamond prices show what they are worth in money at the base rate (EU CPC rules).
+	if str(entry["currency"]) == "diamonds":
+		var worth := UiTheme.label("(" + ShopCatalog.money_value(int(entry["price"])) + ")", maxi(8, font_size - 3), UiTheme.TEXT if on_colour else UiTheme.MUTED)
+		worth.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(worth)
 	return row
 
 

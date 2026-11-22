@@ -193,7 +193,7 @@ func _next_back() -> int:
 	var count := ShopSheet.back_count()
 	for step: int in range(1, count + 1):
 		var index := (Settings.card_back + step) % count
-		if ShopCatalog.back_unlocked(index, Game.profile.wallet):
+		if ShopCatalog.back_unlocked(index, Game.wallet()):
 			return index
 	return 0
 

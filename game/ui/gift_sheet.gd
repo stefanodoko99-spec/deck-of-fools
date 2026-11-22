@@ -5,7 +5,7 @@ extends Sheet
 ## It opens only when the player taps the gift on the menu, never by itself: a gift should
 ## feel like a treat, not a pop-up in the way.
 ##
-## After claiming, a rewarded ad can double the gift when ads are on and AdPolicy allows
+## After claiming, a rewarded ad can double the gift's coins when ads are on and AdPolicy allows
 ## one. While that ad plays the sheet can't be closed, because the gift is doubled here
 ## once the ad reports back, and closing first would lose a reward the player earned.
 
@@ -28,13 +28,13 @@ func _init() -> void:
 	panel_size = Vector2(540, 300)
 
 
-## The streak day the calendar marks as today: the one a claim would give now, or the one
-## already claimed today.
+## The calendar step the gift marks as today: the one a claim would give now, or the one
+## already claimed today. Missed days don't reset the calendar, they only pause it.
 static func today_day() -> int:
-	var w := Game.profile.wallet
+	var w := Game.wallet()
 	if not Game.gift_ready():
 		return maxi(1, w.gift_streak)
-	return w.gift_streak + 1 if Economy.is_next_day(w.gift_day, Economy.today()) else 1
+	return w.gift_streak + 1
 
 
 ## Where a streak day falls in the week, 1 to 7.
@@ -165,9 +165,7 @@ func _build_claim(col: VBoxContainer, day: int) -> void:
 	claim.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(claim)
 	col.add_child(row)
-	# Day 1 after earlier claims means the streak broke (a streak past day 7 counts on).
-	if day == 1 and Game.profile.wallet.gift_streak > 0:
-		col.add_child(_centred_label("You missed a day, so the week starts again.", 9, UiTheme.MUTED))
+	col.add_child(_centred_label("Missed a day? Nothing is lost: the calendar just waits for you.", 9, UiTheme.MUTED))
 
 
 ## Just claimed: the gift in big numbers (they count up), then the offer to double it.
@@ -177,8 +175,9 @@ func _build_reveal(col: VBoxContainer) -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 20)
 	row.add_child(_big_amount("coins", int(_gift.get("coins", 0)) * times))
+	# Only the coins double: an ad never pays out diamonds.
 	if int(_gift.get("diamonds", 0)) > 0:
-		row.add_child(_big_amount("diamonds", int(_gift["diamonds"]) * times))
+		row.add_child(_big_amount("diamonds", int(_gift["diamonds"])))
 	col.add_child(row)
 	var next := "Come back tomorrow for day %d." % week_day(int(_gift.get("day", 1)) + 1)
 	if _doubled:
@@ -195,9 +194,9 @@ func _build_reveal(col: VBoxContainer) -> void:
 
 
 func _build_tomorrow(col: VBoxContainer) -> void:
-	var w := Game.profile.wallet
+	var w := Game.wallet()
 	col.add_child(_centred_label("Come back tomorrow for day %d" % week_day(w.gift_streak + 1), 14, UiTheme.TEXT, true))
-	col.add_child(_centred_label("Today's gift is claimed. %d day%s in a row so far." % [w.gift_streak, "" if w.gift_streak == 1 else "s"], 9, UiTheme.MUTED))
+	col.add_child(_centred_label("Today's gift is claimed. %d gift%s claimed so far." % [w.gift_streak, "" if w.gift_streak == 1 else "s"], 9, UiTheme.MUTED))
 
 
 func _big_amount(kind: String, amount: int) -> HBoxContainer:
@@ -215,9 +214,9 @@ func _big_amount(kind: String, amount: int) -> HBoxContainer:
 	return row
 
 
-## "Watch an ad to double it", with the play glyph that marks rewarded ads.
+## "Watch an ad to double the coins", with the play glyph that marks rewarded ads.
 func _ad_button() -> Button:
-	var b := UiTheme.button("Watch an ad to double it", _double, 11, UiTheme.POINTS)
+	var b := UiTheme.button("Watch an ad to double the coins", _double, 11, UiTheme.POINTS)
 	b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	b.custom_minimum_size = Vector2(0, 28)
 	var glyph := UiIcon.new("play", UiTheme.TEXT)
@@ -268,13 +267,15 @@ func _double() -> void:
 		_note = "The ad was closed early, so the gift stays as it is."
 		rebuild()
 		return
-	Game.double_gift(_gift)
+	if not Game.double_gift(_gift):
+		_note = "Today's gift was already doubled."
+		rebuild()
+		return
 	_doubled = true
 	Feel.play("cash")
 	Feel.buzz(25)
 	rebuild()
 	_roll(_coin_label, int(_gift.get("coins", 0)), int(_gift.get("coins", 0)) * 2)
-	_roll(_gem_label, int(_gift.get("diamonds", 0)), int(_gift.get("diamonds", 0)) * 2)
 
 
 ## Count a big number up to its value, then give it a little pop.

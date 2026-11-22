@@ -422,7 +422,7 @@ func _gift_button() -> Button:
 ## The wallet: coins and diamonds after a gold Shop badge (the bag). The whole pill opens
 ## the Shop. Its width is measured from the numbers, so the bar can budget for it.
 func _wallet_pill() -> Button:
-	var w := Game.profile.wallet
+	var w := Game.wallet()
 	var pill := UiTheme.button("", func() -> void: _open(ShopSheet.new()))
 	pill.name = "WalletPill"
 	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -529,7 +529,7 @@ func _after_sheet() -> void:
 
 
 func _wallet_state() -> String:
-	var w := Game.profile.wallet
+	var w := Game.wallet()
 	return "%d/%d/%s" % [w.coins, w.diamonds, Game.gift_ready()]
 
 
