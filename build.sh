@@ -24,8 +24,16 @@ gzip -9 -c build/web/index.pck > build/web/index.pck.gz
 # Stored under another name so requests for index.pck reach the worker, which picks
 # the compressed copy (a file at the requested path would be served directly).
 mv build/web/index.pck build/web/index.pck.raw
-# Keep the engine cached across game updates (it only changes with Godot itself).
-node tools/patch_service_worker.mjs build/web "$ENGINE_HASH"
+# The music stays out of the game data on the web (export filter audio/music/*): the
+# game fetches these files after the menu appears (Feel._fetch_track).
+mkdir -p build/web/music
+cp game/audio/music/*.ogg build/web/music/
+MUSIC_HASH=$(cat build/web/music/*.ogg | shasum -a 256 | cut -c1-16)
+# Keep the engine cached across game updates (it only changes with Godot itself), and
+# the music in a cache of its own.
+node tools/patch_service_worker.mjs build/web "$ENGINE_HASH" "$MUSIC_HASH"
+# A service worker that fails to parse silently stops caching for every player.
+node --check build/web/index.service.worker.js
 # The privacy and support pages the App Store asks for. They go live once a real
 # contact address replaces the CONTACT_EMAIL placeholder.
 if grep -q CONTACT_EMAIL site/public/*.html; then

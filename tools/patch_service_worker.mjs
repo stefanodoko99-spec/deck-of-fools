@@ -7,12 +7,17 @@
 // of its own, named after a hash of its contents: it is only fetched again when the
 // engine itself changes (a Godot upgrade). index.pck still updates with every build.
 //
-// Usage: node tools/patch_service_worker.mjs build/web <engine-hash>
+// The music (fetched by the game after the menu appears, from music/*.ogg) gets a
+// cache of its own too, named after a hash of the files, and is served from it first.
+// It is kept out of Godot's own file list on purpose: that list must be complete for
+// the game to start offline, and the music arrives later.
+//
+// Usage: node tools/patch_service_worker.mjs build/web <engine-hash> [<music-hash>]
 // Fails loudly if Godot's service worker no longer looks as expected.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [dir, hash] = process.argv.slice(2);
+const [dir, hash, musicHash = "none"] = process.argv.slice(2);
 if (!dir || !/^[0-9a-f]{8,64}$/.test(hash || "")) {
   console.error("usage: node tools/patch_service_worker.mjs <web build dir> <hex engine hash>");
   process.exit(2);
@@ -45,13 +50,37 @@ const ENGINE_CACHE = ENGINE_CACHE_PREFIX + '${hash}';
 /** @param {string} name */
 function cacheFor(name) {
 	return caches.open(name === ENGINE_FILE ? ENGINE_CACHE : CACHE_NAME);
-}`,
+}
+const MUSIC_CACHE_PREFIX = 'Deck of Fools-music-';
+const MUSIC_CACHE = MUSIC_CACHE_PREFIX + '${musicHash}';
+// Music: served from its own cache first, fetched and kept otherwise. Registered
+// before Godot's handler, which leaves these requests alone.
+self.addEventListener('fetch', (event) => {
+	const url = new URL(event.request.url);
+	const parts = url.pathname.split('/');
+	const isMusic = parts.length >= 2 && parts[parts.length - 2] === 'music' && url.pathname.endsWith('.ogg');
+	if (event.request.method !== 'GET' || url.origin !== self.location.origin || !isMusic) {
+		return;
+	}
+	event.respondWith((async () => {
+		const cache = await caches.open(MUSIC_CACHE);
+		const hit = await cache.match(event.request);
+		if (hit) {
+			return hit;
+		}
+		const response = await fetch(event.request);
+		if (response.ok) {
+			event.waitUntil(cache.put(event.request, response.clone()));
+		}
+		return response;
+	})());
+});`,
   "FULL_CACHE",
 );
 
 replaceOnce(
   "return Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME).map((key) => caches.delete(key)));",
-  "return Promise.all(keys.filter((key) => (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) || (key.startsWith(ENGINE_CACHE_PREFIX) && key !== ENGINE_CACHE)).map((key) => caches.delete(key)));",
+  "return Promise.all(keys.filter((key) => (key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME) || (key.startsWith(ENGINE_CACHE_PREFIX) && key !== ENGINE_CACHE) || (key.startsWith(MUSIC_CACHE_PREFIX) && key !== MUSIC_CACHE)).map((key) => caches.delete(key)));",
   "old cache cleanup",
 );
 
@@ -68,4 +97,4 @@ replaceOnce(
 );
 
 writeFileSync(file, src);
-console.log(`patched ${file}: engine cache ${hash}`);
+console.log(`patched ${file}: engine cache ${hash}, music cache ${musicHash}`);

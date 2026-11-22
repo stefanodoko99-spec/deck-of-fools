@@ -77,6 +77,11 @@ var _music_tweens: Array[Tween] = [null, null]
 
 
 var _drives: Array[AudioStreamPlayer] = []
+## Web builds fetch the music after the menu: tracks that arrived, tracks on their way,
+## and the track that should start as soon as it (and its drive layer) is here.
+var _fetched: Dictionary = {}
+var _fetching: Dictionary = {}
+var _waiting_track := ""
 var _intensity := 0.0
 var _intensity_target := 0.0
 
@@ -118,6 +123,7 @@ func _ready() -> void:
 		add_child(d)
 		_drives.append(d)
 	_switch_music(TRACKS[_mood])
+	_prefetch_music()
 
 
 
@@ -398,15 +404,25 @@ func _switch_music(track: String, force := false) -> void:
 		return
 	var target_db: float = TRACK_VOLUME.get(track, -14.0) + linear_to_db(Settings.music_volume)
 	if current == null:
+		# On the web the music arrives after the menu (see _fetch_track); a track and its
+		# drive layer start together once both are here, so they stay in sync.
+		var main_stream := _load_track(track)
+		var drive_stream: AudioStream = _load_track(DRIVES[track][0]) if DRIVES.has(track) else null
+		if main_stream == null or (DRIVES.has(track) and drive_stream == null):
+			_waiting_track = track
+			for m in _music:
+				_fade(m, -80.0, 1.2)
+			return
+		_waiting_track = ""
 		current = _music[0] if not _music[0].playing or _music[0].volume_db < _music[1].volume_db else _music[1]
-		current.stream = _load_track(track)
+		current.stream = main_stream
 		current.set_meta("track", track)
 		current.volume_db = -60.0
 		current.play()
 		var drive := _drives[_music.find(current)]
 		drive.stop()
 		if DRIVES.has(track):
-			drive.stream = _load_track(DRIVES[track][0])
+			drive.stream = drive_stream
 			drive.set_meta("offset", DRIVES[track][1])
 			drive.volume_db = -80.0
 			drive.play()
@@ -416,12 +432,60 @@ func _switch_music(track: String, force := false) -> void:
 			_fade(m, -80.0, 1.2)
 
 
+## The music, as looping Ogg Vorbis. Builds that carry it in the game data load it from
+## there; the web build leaves it out of the first download and fetches it after the
+## menu appears (build.sh copies the files to music/), so this returns null until the
+## track has arrived.
 func _load_track(track: String) -> AudioStream:
-	var stream: AudioStreamWAV = load("res://audio/music/%s.wav" % track)
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_begin = 0
-	stream.loop_end = int(stream.get_length() * stream.mix_rate)
+	var path := "res://audio/music/%s.ogg" % track
+	var stream: AudioStreamOggVorbis = null
+	if ResourceLoader.exists(path):
+		stream = load(path)
+	elif _fetched.has(track):
+		stream = _fetched[track]
+	else:
+		_fetch_track(track)
+		return null
+	stream.loop = true
+	stream.loop_offset = 0.0
 	return stream
+
+
+## Download one track (web builds only), then start the music if it was waiting for it.
+func _fetch_track(track: String) -> void:
+	if _fetching.has(track) or _fetched.has(track) or not OS.has_feature("web"):
+		return
+	_fetching[track] = true
+	var http := HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(func(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+		http.queue_free()
+		_fetching.erase(track)
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			return
+		var stream := AudioStreamOggVorbis.load_from_buffer(body)
+		if stream == null:
+			return
+		_fetched[track] = stream
+		if _waiting_track != "" and (track == _waiting_track or track == str(DRIVES.get(_waiting_track, [""])[0])):
+			var wanted := _waiting_track
+			_track = ""
+			_switch_music(wanted, true))
+	var base := str(JavaScriptBridge.eval("location.href.split('?')[0].split('#')[0].replace(/[^/]*$/, '')", true))
+	if http.request(base + "music/%s.ogg" % track) != OK:
+		_fetching.erase(track)
+		http.queue_free()
+
+
+## Fetch every track once the game is running, menu music first, one at a time so the
+## downloads never compete with each other.
+func _prefetch_music() -> void:
+	if not OS.has_feature("web") or ResourceLoader.exists("res://audio/music/theme.ogg"):
+		return
+	for track: String in ["theme", "shop", "show", "show_drive", "patron", "patron_drive"]:
+		_fetch_track(track)
+		while _fetching.has(track):
+			await get_tree().create_timer(0.25).timeout
 
 
 func _fade(player: AudioStreamPlayer, to_db: float, seconds := 1.2) -> void:

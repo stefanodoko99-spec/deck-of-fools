@@ -1,7 +1,8 @@
 class_name GiftSheet
 extends Sheet
-## The daily gift: a week of seven gifts (Economy.GIFTS). Claiming on days in a row climbs
-## the week; missing a day starts it again at day 1, and after day 7 a new week begins.
+## The daily gift: a week of seven gifts (Economy.GIFTS). Each claim moves one step up the
+## week; a missed day is simply skipped (nothing resets, per PEGI's 2026 criteria), and
+## after day 7 a new week begins.
 ## It opens only when the player taps the gift on the menu, never by itself: a gift should
 ## feel like a treat, not a pop-up in the way.
 ##
@@ -45,7 +46,7 @@ static func week_day(day: int) -> int:
 func _build() -> void:
 	var ready_now := Game.gift_ready()
 	var day := today_day()
-	var intro := UiTheme.label("A gift for every day you play. Come back on days in a row to climb the week; miss a day and it starts again at day 1.", 9, UiTheme.MUTED)
+	var intro := UiTheme.label("A gift for every day you play. Each claim moves you one step up the week; days you miss are simply skipped, never lost.", 9, UiTheme.MUTED)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size = Vector2(panel_size.x - 28.0, 0)
 	body.add_child(intro)
