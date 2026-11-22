@@ -7,5 +7,7 @@ cd "$(dirname "$0")"
 GODOT="${GODOT:-$HOME/Developer/godot-4.7.2/Godot.app/Contents/MacOS/Godot}"
 ./check.sh
 rm -rf build/ios && mkdir -p build/ios
-"$GODOT" --headless --path game --export-release "iOS" ../build/ios/DeckOfFools.ipa 2>&1 | grep -E "ERROR|SCRIPT ERROR|error" || true
+# IOS_PRESET="iOS Test Store" ./ios.sh exports with the test store and test ads
+# (custom feature store_test) for trying the shop in the Simulator. Never submit that build.
+"$GODOT" --headless --path game --export-release "${IOS_PRESET:-iOS}" ../build/ios/DeckOfFools.ipa 2>&1 | grep -E "ERROR|SCRIPT ERROR|error" || true
 ls build/ios

@@ -8,7 +8,9 @@ GODOT="${GODOT:-$HOME/Developer/godot-4.7.2/Godot.app/Contents/MacOS/Godot}"
 ./check.sh
 rm -rf build/web && mkdir -p build/web
 "$GODOT" --headless --path game --import
-"$GODOT" --headless --path game --export-release "Web" ../build/web/index.html
+# WEB_PRESET="Web Test Store" ./build.sh builds with the test store and test ads
+# (custom feature store_test), for a preview version only, never for production.
+"$GODOT" --headless --path game --export-release "${WEB_PRESET:-Web}" ../build/web/index.html
 # Compress the engine and the game data once here, so the worker can send them as they
 # are (site/worker.js): Brotli (~6.9 MB engine) for browsers that take it, gzip (~10 MB)
 # as the fallback. Workers static assets cap each file at 25 MiB, so the raw ~38 MiB
