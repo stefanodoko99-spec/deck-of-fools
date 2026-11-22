@@ -147,6 +147,11 @@ html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hid
 body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
 #canvas { touch-action: none; }
 #status { background: radial-gradient(circle at 50% 45%, #5a1240, #1e0b3d 70%); }
+/* Loading: the title, a percentage and a tip under the bar, so the wait reads as the
+   theatre getting ready rather than a stalled page. */
+#status-title { position: absolute; top: 34%; left: 0; right: 0; text-align: center; font: 800 clamp(30px, 7vw, 54px)/1 -apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, system-ui, sans-serif; letter-spacing: -.02em; color: #f0b84a; text-shadow: 0 4px 18px rgba(0, 0, 0, .45); }
+#status-caption { position: absolute; left: 0; right: 0; top: calc(50% + 34px); text-align: center; font: 600 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; color: #fbf3e4; -webkit-font-smoothing: antialiased; }
+#status-caption .tip { display: block; margin: 6px auto 0; max-width: min(520px, 86vw); font-weight: 500; font-size: 13px; color: #cbbfe0; transition: opacity .35s; }
 .dof-layer { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; font: 500 16px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif; color: #fbf3e4; -webkit-font-smoothing: antialiased; }
 /* Phones held upright: the game is landscape only. */
 #rotate-hint { background: radial-gradient(circle at 50% 40%, #8e1230, #1e0b3d 75%); flex-direction: column; gap: 14px; text-align: center; padding: 24px; font-weight: 600; font-size: 19px; }
@@ -282,7 +287,9 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 
 		<div id="status">
 			<img id="status-splash" class="$GODOT_SPLASH_CLASSES" src="$GODOT_SPLASH" alt="">
+			<div id="status-title">Deck of Fools</div>
 			<progress id="status-progress"></progress>
+			<div id="status-caption" aria-live="polite"><span class="pct">Setting the stage</span><span class="tip"></span></div>
 			<div id="status-notice"></div>
 		</div>
 
@@ -379,19 +386,44 @@ const engine = new Engine(GODOT_CONFIG);
 		}
 	} else {
 		setStatusMode('progress');
+		// A percentage and a rotating tip under the bar while the game downloads.
+		const caption = document.getElementById('status-caption');
+		const pct = caption.querySelector('.pct');
+		const tip = caption.querySelector('.tip');
+		const tips = [
+			'Hold any card to read what it does.',
+			'Flushes and straights score far more than pairs.',
+			'Jesters work left to right: drag them to change the order.',
+			'Skip a Matinee or Evening show to take its Favor instead.',
+			'Unused hands pay extra ducats when you win a show.',
+			'The daily run deals the same cards to everyone.',
+		];
+		let tipIndex = Math.floor(Math.random() * tips.length);
+		tip.textContent = tips[tipIndex];
+		const tipTimer = setInterval(() => {
+			tipIndex = (tipIndex + 1) % tips.length;
+			tip.style.opacity = '0';
+			setTimeout(() => { tip.textContent = tips[tipIndex]; tip.style.opacity = '1'; }, 350);
+		}, 4000);
 		engine.startGame({
 			'onProgress': function (current, total) {
 				if (current > 0 && total > 0) {
 					statusProgress.value = current;
 					statusProgress.max = total;
+					pct.textContent = current >= total ? 'Raising the curtain…' : 'Setting the stage… ' + Math.floor(100 * current / total) + '%';
 				} else {
 					statusProgress.removeAttribute('value');
 					statusProgress.removeAttribute('max');
 				}
 			},
 		}).then(() => {
+			clearInterval(tipTimer);
 			setStatusMode('hidden');
-		}, displayFailureNotice);
+		}, (err) => {
+			clearInterval(tipTimer);
+			caption.style.display = 'none';
+			displayFailureNotice(err);
+		});
 	}
 }());
 		</script>
