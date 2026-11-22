@@ -30,6 +30,9 @@ var wallet := Wallet.new()
 var test_wallet := Wallet.new()
 ## The first day this profile played (UTC, YYYY-MM-DD): new players see no ad breaks.
 var first_played := ""
+## Each feature's own saved state (daily goals, the inbox, collection sets, the
+## chronicle, the season...), so features never edit each other's fields. Use state().
+var extra: Dictionary = {}
 
 
 
@@ -113,7 +116,7 @@ func to_dict() -> Dictionary:
 		"challenges_won": challenges_won.keys(), "badges": badges.duplicate(),
 		"jester_runs": jester_runs.duplicate(), "jester_wins": jester_wins.duplicate(),
 		"runs_played": runs_played, "wallet": wallet.to_dict(), "test_wallet": test_wallet.to_dict(),
-		"first_played": first_played,
+		"first_played": first_played, "extra": extra.duplicate(true),
 	}
 
 
@@ -145,6 +148,11 @@ static func from_dict(d: Dictionary) -> Profile:
 	if tw is Dictionary:
 		p.test_wallet = Wallet.from_dict(tw)
 	p.first_played = str(d.get("first_played", ""))
+	var more: Variant = d.get("extra")
+	if more is Dictionary:
+		for key: Variant in more:
+			if (more as Dictionary)[key] is Dictionary:
+				p.extra[str(key)] = ((more as Dictionary)[key] as Dictionary).duplicate(true)
 	return p
 
 
@@ -164,3 +172,12 @@ func days_played_since(today: String) -> int:
 	var a := Time.get_unix_time_from_datetime_string(first_played + "T12:00:00")
 	var b := Time.get_unix_time_from_datetime_string(today + "T12:00:00")
 	return maxi(0, roundi((b - a) / 86400.0))
+
+
+## The saved state of one feature, created empty the first time. Change it in place,
+## then call Game.save_profile().
+func state(feature: String) -> Dictionary:
+	if not extra.has(feature) or not extra[feature] is Dictionary:
+		extra[feature] = {}
+	return extra[feature]
+

@@ -4,6 +4,15 @@ extends Node
 
 
 signal changed
+## What just happened in a run, for features that react to play (daily goals, tips,
+## seasons, Jester mastery) without touching the run code. Kinds and their data:
+##   "hand_played" {hand, total, points, mult, cards, show, town}
+##   "discarded"   {count, show, town}
+##   "show_won"    {show, town, hands_left, discards_left, hands_played, coins}
+##   "show_lost"   {show, town, score, target}
+##   "jester_bought" {id}
+##   "run_finished" {won, mode, town, stake, deck, encores, daily, practice}
+signal run_event(kind: String, data: Dictionary)
 
 const RUN_PATH := "user://run.json"
 const RUN_META_PATH := "user://run_meta.json"
@@ -115,9 +124,11 @@ func act(action: Dictionary, quiet := false) -> Dictionary:
 	var before_show := run.show_index
 	var before_town := run.town
 	var before_won := run.won
+	var zanni_before := run.zanni.size()
 	var result := run.apply(action)
 	if result["ok"]:
 		_pay_coins(before_phase, before_show, before_town, before_won)
+		_tell_run_events(str(action.get("a", "")), action, result, before_phase, before_show, before_town, zanni_before)
 		# A lost show waits for the player to take or decline an Encore.
 		if run.phase == RunState.Phase.LOST and not encore_open():
 			finish_run()
@@ -159,6 +170,25 @@ func _pay_coins(before_phase: int, before_show: int, before_town: int, before_wo
 		run_meta["run_coins"] = int(run_meta.get("run_coins", 0)) + paid
 		_save_json(RUN_META_PATH, run_meta, false)
 		save_profile()
+
+
+func _tell_run_events(kind: String, action: Dictionary, result: Dictionary, before_phase: int, before_show: int, before_town: int, zanni_before: int) -> void:
+	match kind:
+		"play":
+			run_event.emit("hand_played", { "hand": str(result.get("hand", "")), "total": float(result.get("total", 0.0)),
+				"points": float(result.get("points", 0.0)), "mult": float(result.get("mult", 0.0)),
+				"cards": (action.get("cards", []) as Array).size(), "show": before_show, "town": before_town })
+		"discard":
+			run_event.emit("discarded", { "count": (action.get("cards", []) as Array).size(), "show": before_show, "town": before_town })
+	if run.zanni.size() > zanni_before and (kind == "buy" or kind == "pick"):
+		run_event.emit("jester_bought", { "id": run.zanni[run.zanni.size() - 1].def_id })
+	if before_phase == RunState.Phase.IN_SHOW and run.phase == RunState.Phase.CASH_OUT:
+		var paid: Variant = run_meta.get("show_coins")
+		run_event.emit("show_won", { "show": before_show, "town": before_town, "hands_left": run.hands_left,
+			"discards_left": run.discards_left, "hands_played": int(run.show_counters.get("hands_played", 0)),
+			"coins": int((paid as Dictionary).get("coins", 0)) if paid is Dictionary else 0 })
+	if before_phase == RunState.Phase.IN_SHOW and run.phase == RunState.Phase.LOST:
+		run_event.emit("show_lost", { "show": before_show, "town": before_town, "score": run.show_score, "target": run.show_target })
 
 
 ## The curtain call: once a run has ended, its show and win coins can be doubled once
@@ -288,6 +318,9 @@ func finish_run() -> void:
 	var found_before := profile.jesters_found()
 	profile.record_run(run)
 	recorded = true
+	run_event.emit("run_finished", { "won": run.won, "mode": run.mode, "town": run.town, "stake": run.stake,
+		"deck": run.deck_id, "encores": run.encores(), "daily": run_meta.has("daily_date"),
+		"practice": bool(run_meta.get("practice", false)) })
 	var w := wallet()
 	# Finishing the daily run (ranked or practice) pays once a day.
 	if run_meta.has("daily_date") and w.daily_run_day < Economy.today():
@@ -306,6 +339,7 @@ func finish_run() -> void:
 	_save_json(PROFILE_PATH, profile.to_dict())
 	if FileAccess.file_exists(RUN_PATH):
 		DirAccess.remove_absolute(RUN_PATH)
+	WebStatus.publish(null)
 	# Quick runs and boss rushes are just for fun: only the tour is ranked, and a run
 	# that took an Encore isn't ranked either.
 	if run.mode == "tour" and run.encores() == 0:
@@ -345,6 +379,7 @@ func first_run_finished() -> bool:
 
 func _save_run() -> void:
 	_save_json(RUN_PATH, run.to_dict())
+	WebStatus.publish(run)
 
 
 func _load_profile() -> Profile:
