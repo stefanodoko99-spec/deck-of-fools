@@ -17,3 +17,8 @@ func ready_count() -> int:
 ## Claim a finished goal; returns the coins paid (0 if it can't be claimed).
 func claim(_id: String) -> int:
 	return 0
+
+
+## Open the goals sheet (the home screen's goals ring calls this).
+func open() -> void:
+	pass
