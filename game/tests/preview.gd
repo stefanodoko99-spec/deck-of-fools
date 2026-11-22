@@ -7,6 +7,8 @@ extends RefCounted
 ##   ?screen=big                a few faces at large size, to judge detail
 ##   ?screen=menu | run         the real screens (run&guide=0 starts the guided first run)
 ##   ?screen=collection&page=2  the Jester collection (&inspect=z_zanni opens one up close)
+##   ?screen=shop&tab=featured|backs|diamonds   the Shop (test store); ?screen=gift the daily gift
+## Add &coins=1500&diamonds=400 to menu, shop or gift to fill the (test) wallet first.
 ## Add &found=60 to menu or collection to pretend that many Jesters have been met.
 ##   ?screen=sky                the backdrop alone
 ## Add &mood=patron|shop|menu|show&town=3 to set the backdrop, and
@@ -40,7 +42,18 @@ static func open(main: Control, request: Dictionary) -> void:
 		again.autostart = true
 		again.timeout.connect(Feel.celebrate.bind(burst))
 		main.add_child(again)
+	if request.has("coins") or request.has("diamonds"):
+		Game.wallet().earn("coins", int(request.get("coins", "0")))
+		Game.wallet().earn("diamonds", int(request.get("diamonds", "0")))
 	match screen:
+		"shop", "gift":
+			main.call("_show_menu")
+			if screen == "shop":
+				UiTheme.show_sheet(ShopSheet.new(str(request.get("tab", "featured"))))
+			else:
+				Game.wallet().gift_day = ""
+				UiTheme.show_sheet(GiftSheet.new())
+			return
 		"menu", "collection":
 			if request.has("found") or screen == "collection":
 				_seed_profile(int(request.get("found", "48")))
@@ -59,11 +72,13 @@ static func open(main: Control, request: Dictionary) -> void:
 			# &guide=0 starts the guided first run (any step number works).
 			if request.has("guide"):
 				Settings.tutorial_step = int(request["guide"])
-			# &easy=1 lowers every show's target to 40, to reach the Market quickly.
-			if request.has("easy"):
+			# &easy=1 lowers every show's target to 40, to reach the Market quickly;
+			# &hard=1 raises it out of reach, to lose a show (and see the Encore) quickly.
+			if request.has("easy") or request.has("hard"):
+				var hard := request.has("hard")
 				Game.changed.connect(func() -> void:
 					if Game.run != null and Game.run.phase == RunState.Phase.IN_SHOW:
-						Game.run.show_target = minf(Game.run.show_target, 40.0))
+						Game.run.show_target = 1e9 if hard else minf(Game.run.show_target, 40.0))
 			Game.new_run("d_bergamo", 1, "", "PREVIEW")
 			main.call("_show_run")
 			return

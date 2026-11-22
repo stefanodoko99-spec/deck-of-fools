@@ -207,7 +207,7 @@ func _no_ads_tile() -> Control:
 	var tile := Tile.new(NO_ADS)
 	tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tile.col.add_theme_constant_override("separation", 4)
-	tile.col.add_child(_tag("Yours for good"))
+	tile.col.add_child(_tag("One-time"))
 	var title := UiTheme.title(str(p["name"]), 15, UiTheme.TEXT)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tile.col.add_child(title)
