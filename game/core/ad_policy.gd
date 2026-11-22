@@ -31,6 +31,7 @@ const MAX_PER_DAY := 4
 const MAX_REWARDED_PER_DAY := 10
 ## Town breaks only on the way into odd towns from the third (after towns 2, 4, 6).
 const TOWN_BREAK_FIRST := 3
+const TOWN_BREAK_LAST := 7
 
 
 ## Returns "" when the placement may show now, or the reason it may not.
@@ -70,8 +71,8 @@ static func check(placement: String, s: Dictionary) -> String:
 		if bool(s.get("ranked_daily", false)):
 			return "not in the ranked daily run"
 		var town := int(s.get("town", 0))
-		if town < TOWN_BREAK_FIRST or town % 2 == 0:
-			return "only every other town"
+		if town < TOWN_BREAK_FIRST or town > TOWN_BREAK_LAST or town % 2 == 0:
+			return "only on the way into towns 3, 5 and 7"
 	if now - float(s.get("session_start", now)) < SESSION_WARMUP:
 		return "too early in the session"
 	if _within(now, s.get("last_intermission", -1), COOLDOWN):

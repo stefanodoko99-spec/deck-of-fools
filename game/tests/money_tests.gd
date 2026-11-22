@@ -79,6 +79,18 @@ func _wallet() -> void:
 	eq(hostile.diamonds, 12, "numeric strings are read")
 	eq(hostile.items, { "b": 2 }, "bad item counts are dropped")
 	ok(hostile.owned.is_empty() and hostile.purchases.is_empty(), "bad lists are ignored")
+	var old_save := Wallet.from_dict({ "coins": 5 })
+	eq(old_save.album_paid, -1, "a save from before the album count starts uncounted")
+	ok(old_save.ad_last_intermission < 0 and old_save.ad_last_rewarded < 0 and old_save.ad_last_purchase < 0, "a save from before the ad times has none")
+	var timed := Wallet.new()
+	timed.album_paid = 2
+	timed.ad_last_intermission = 1795300000.0
+	timed.ad_last_rewarded = 1795300100.0
+	timed.ad_last_purchase = 1795300200.0
+	var timed_back := Wallet.from_dict(JSON.parse_string(JSON.stringify(timed.to_dict())))
+	eq(timed_back.album_paid, 2, "album count is saved")
+	eq(timed_back.ad_last_rewarded, 1795300100.0, "ad times are saved, so spacing survives a relaunch")
+	eq(Wallet.from_dict({ "album_paid": -7 }).album_paid, -1, "a bad album count is clamped")
 
 
 func _economy() -> void:
@@ -186,7 +198,7 @@ func _ad_policy() -> void:
 		s[case[0]] = case[1]
 		ok(AdPolicy.check("town_break", s) != "", str(case[2]))
 		ok(AdPolicy.check("run_end", s) != "", str(case[2]) + " (run end)")
-	for town in [1, 2, 4, 6, 8]:
+	for town in [1, 2, 4, 6, 8, 9, 11]:
 		var s := base.duplicate()
 		s["town"] = town
 		ok(AdPolicy.check("town_break", s) != "", "no town break into town %d" % town)

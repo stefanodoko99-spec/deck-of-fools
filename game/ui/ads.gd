@@ -16,10 +16,7 @@ signal _live_done(token: int, completed: bool)
 const LIVE_TIMEOUT := 45.0
 
 var mode := "off"
-var last_purchase := -1.0
 var _session_start := 0.0
-var _last_intermission := -1.0
-var _last_rewarded := -1.0
 var _intermissions_session := 0
 var _token := 0
 var _playing := false
@@ -47,8 +44,17 @@ func _notification(what: int) -> void:
 			_left_at = -1.0
 
 
+## Wall-clock seconds: they keep counting while a phone sleeps, and the times of the
+## last intermission, rewarded ad and purchase are saved in the wallet, so the spacing
+## rules hold across sleeps and relaunches.
 func now() -> float:
-	return Time.get_ticks_msec() / 1000.0
+	return Time.get_unix_time_from_system()
+
+
+## Called by Store after a purchase: no intermission for a while after paying.
+func note_purchase() -> void:
+	Game.wallet().ad_last_purchase = now()
+	Game.save_profile()
 
 
 ## The state AdPolicy decides on; `context` adds details such as { "encore_used": true }
@@ -63,7 +69,7 @@ func snapshot(context := {}) -> Dictionary:
 		"in_tutorial": Settings.tutorial_step >= 0,
 		"payer": w.is_payer(), "remove_ads": w.owns("remove_ads"),
 		"ranked_daily": Game.run != null and Game.is_ranked_daily(),
-		"last_intermission": _last_intermission, "last_rewarded": _last_rewarded, "last_purchase": last_purchase,
+		"last_intermission": w.ad_last_intermission, "last_rewarded": w.ad_last_rewarded, "last_purchase": w.ad_last_purchase,
 		"intermissions_session": _intermissions_session, "intermissions_today": w.intermissions_today,
 		"rewarded_today": w.rewarded_today,
 	}
@@ -80,10 +86,12 @@ func show_rewarded(placement: String, context := {}) -> bool:
 	if not can_offer(placement, context):
 		return false
 	var completed: bool = await _play(placement, true)
+	# Any rewarded ad that was shown starts the pause before an intermission, even if
+	# it was closed early: never two full-screen ads back to back.
+	Game.wallet().ad_last_rewarded = now()
 	if completed:
-		_last_rewarded = now()
 		Game.wallet().rewarded_today += 1
-		Game.save_profile()
+	Game.save_profile()
 	shown.emit(placement, completed)
 	return completed
 
@@ -92,7 +100,7 @@ func show_rewarded(placement: String, context := {}) -> bool:
 func intermission(placement: String, context := {}) -> void:
 	if _playing or AdPolicy.check(placement, snapshot(context)) != "":
 		return
-	_last_intermission = now()
+	Game.wallet().ad_last_intermission = now()
 	_intermissions_session += 1
 	Game.wallet().intermissions_today += 1
 	Game.save_profile()
