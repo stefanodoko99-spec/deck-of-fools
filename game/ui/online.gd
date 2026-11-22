@@ -91,6 +91,10 @@ func native_identity_token(_provider: String) -> String:
 
 
 func call_api(method: int, path: String, body: Variant = null) -> Dictionary:
+	# Headless runs (check.sh, tests, exports) never talk to the server: they used to
+	# create a guest account on the live API every time.
+	if inert:
+		return { "ok": false, "error": "offline (headless run)", "status": 0 }
 	var http := HTTPRequest.new()
 	http.timeout = 12.0
 	add_child(http)

@@ -32,6 +32,11 @@ static func from_dict(d: Dictionary) -> ShopState:
 			offer["card"] = (o["card"] as Dictionary).duplicate()
 		if o.has("free"):
 			offer["free"] = bool(o["free"])
+		# Stake stickers (Eternal, Perishable, Rented) must survive a save and load.
+		if o.has("sticker"):
+			offer["sticker"] = str(o["sticker"])
+		if o.has("rented"):
+			offer["rented"] = bool(o["rented"])
 		shop.offers.append(offer)
 	for p in d.get("packs", []):
 		var pack := { "id": str(p["id"]), "cost": int(p["cost"]), "sold": bool(p["sold"]) }

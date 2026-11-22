@@ -38,7 +38,6 @@ func test_endless_targets_are_round_numbers() -> void:
 			var exact := last * (1 << extra) * (100 + 15 * extra * extra) / 100
 			if Shows.base_target(town, scaling) != float(exact):
 				misses.append("scaling %d town %d: %d instead of %d" % [scaling, town, Shows.base_target(town, scaling), exact])
-	known_bug("endless-target-rounding", "Shows.base_target() (shows.gd:27) floors a float product and 1.0 + 0.15 * extra * extra is a hair under 1.15 (town 9) and 2.35 (town 11), so those towns ask one point less than the round target")
 	check(misses.is_empty(), ", ".join(misses))
 
 

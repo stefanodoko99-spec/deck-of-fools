@@ -40,4 +40,12 @@ if [ "$code" != "0" ] || ! grep -q "^TESTS PASSED" build/test-output.txt; then
 	echo "test.sh: tests failed (exit code $code)"
 	exit 1
 fi
+# The money core (wallet, economy, shop catalog, ad rules, Encore): a plain script,
+# checked by its own summary line because Godot exits 0 when a -s script fails to compile.
+money=$("$GODOT" --headless --path game --log-file "$PWD/build/money-godot.log" -s tests/money_tests.gd -- --api=http://127.0.0.1:9 2>&1 || true)
+echo "$money" | grep -E "money tests|FAIL" || true
+if echo "$money" | grep -q "SCRIPT ERROR" || ! echo "$money" | grep -qE "^money tests: [0-9]+ checks, 0 failures"; then
+	echo "test.sh: money tests failed"
+	exit 1
+fi
 echo "tests OK"

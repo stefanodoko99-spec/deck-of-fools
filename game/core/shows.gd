@@ -24,4 +24,6 @@ static func base_target(town: int, scaling: int) -> float:
 		return float(row[maxi(town, 1) - 1])
 
 	var extra := town - FINAL_TOWN
-	return floorf(float(row[FINAL_TOWN - 1]) * pow(2.0, extra) * (1.0 + 0.15 * extra * extra))
+	# Whole-number percent math: 1.0 + 0.15 * extra^2 in floats lands a hair under the
+	# round target (114999 instead of 115000).
+	return floorf(float(row[FINAL_TOWN - 1]) * pow(2.0, extra) * (100.0 + 15.0 * extra * extra) / 100.0 + 1e-6)

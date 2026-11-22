@@ -810,6 +810,9 @@ func _discard(ids: Array) -> Dictionary:
 		fire_card_mods("discarded", self, card)
 	fire_all("discard", self, [cards])
 	_draw_to_full(true)
+	# Discarding the last cards with nothing left to draw ends the show, as playing them does.
+	if hand.is_empty():
+		_lose_or_rescue()
 	return _ok({})
 
 
@@ -1093,8 +1096,11 @@ func _swap_patron() -> Dictionary:
 
 func _patron_pool() -> Array[ContentDef]:
 	var finale := town % final_town() == 0
+	# Finale Patrons are meant for the last town; a quick run's last town is 3, earlier
+	# than their usual minimum, so the minimum doesn't apply there.
+	var short_finale := finale and final_town() < Shows.FINAL_TOWN
 	return ContentDB.pool("patron", func(d: ContentDef) -> bool:
-		return bool(d.data.get("finale", false)) == finale and int(d.data.get("min_town", 1)) <= town)
+		return bool(d.data.get("finale", false)) == finale and (short_finale or int(d.data.get("min_town", 1)) <= town))
 
 
 

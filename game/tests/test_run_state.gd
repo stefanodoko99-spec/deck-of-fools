@@ -277,7 +277,6 @@ func test_quick_run_final_show_has_a_patron() -> void:
 	run.town = 3
 	run._start_town()
 	eq(run.town, run.final_town(), "town 3 is the quick run's last")
-	known_bug("quick-final-patron", "RunState._patron_pool() (run_state.gd:1062-1065) asks for a finale Patron when town % final_town() == 0, but every finale Patron has min_town 8 (patron_cards.gd:112-147), so town 3 of a quick run gets town_patron = \"\" and its Patron show has no Patron")
 	check(run.town_patron != "", "quick run town 3 has no Patron (pool: %s)" % [run._patron_pool().map(func(d: ContentDef) -> String: return d.id)])
 
 
@@ -303,7 +302,6 @@ func test_save_and_load_keeps_shop_stickers() -> void:
 		return
 	var offer: Dictionary = run.shop.offers[found]
 	note("seed %s, stake 8, d_bergamo, actions %s: shop offer %d is %s" % [run.seed_text, run.action_log, found, offer])
-	known_bug("shop-stickers", "ShopState.from_dict() (shop_state.gd:26-35) rebuilds each offer without its \"sticker\" and \"rented\" keys, so after Continue a Jester bought from a stake 4+ shop is no longer Eternal/Perishable/Rented (and a Rented one costs 1 ducat with no rent)")
 	var loaded := RunState.from_dict(run.to_dict())
 	eq(loaded.shop.offers[found], offer, "offer after save and load")
 	# What the player gets when buying it after Continue.
@@ -333,7 +331,6 @@ func test_running_out_of_cards_by_discarding_ends_the_show() -> void:
 	while run.discards_left > 0 and not run.hand.is_empty():
 		var ids_now := ids(run.hand)
 		run.apply({ "a": "discard", "cards": ids_now.slice(0, 5) })
-	known_bug("out-of-cards", "_discard() (run_state.gd:758-781) never ends the show when the hand and draw pile are both empty, unlike _play() (run_state.gd:699-700): the run stays IN_SHOW with hands left while every play and discard is refused")
 	note("after %s: phase %s, hand %d, draw pile %d, hands left %d, discards left %d, score %d of %d" % [
 		run.action_log, P.keys()[run.phase], run.hand.size(), run.draw_pile.size(), run.hands_left,
 		run.discards_left, run.show_score, run.show_target])
