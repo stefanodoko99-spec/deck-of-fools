@@ -15,6 +15,16 @@ const LEFT := Vector2(16, 58)
 const LEFT_W := 322.0
 const RIGHT_X := 348.0
 const RIGHT_W := 276.0
+## The top bar runs from just right of the title to the right margin. The title ends near
+## x=207 at the normal text size, and further right with large text, so the bar starts
+## from the title's measured width, never left of BAR_X.
+const BAR_X := 214.0
+const BAR_END := 624.0
+const BAR_GAP := 4
+## The account chip shows the name up to CHIP_MAX wide; with less room than CHIP_MIN
+## left in the bar it shows only its avatar.
+const CHIP_MAX := 170.0
+const CHIP_MIN := 78.0
 
 var deck_ids: Array = []
 var deck_index := 0
@@ -32,6 +42,8 @@ const MODE_WORDS := {
 }
 
 var daily_info: Dictionary = {}
+## The wallet and gift state the menu was last built with (see _after_sheet).
+var _shown_wallet := ""
 
 
 func _ready() -> void:
@@ -41,6 +53,10 @@ func _ready() -> void:
 	_build()
 	Online.account_changed.connect(_on_account_changed)
 	Feel.settings_changed.connect(func() -> void:
+		if is_inside_tree():
+			_build())
+	# A real-money purchase can finish while a sheet is still open: show it at once.
+	Store.purchased.connect(func(_product_id: String) -> void:
 		if is_inside_tree():
 			_build())
 	_fetch_daily()
@@ -80,7 +96,8 @@ func _build() -> void:
 
 	_build_setup(stage)
 	_build_side(stage)
-	_build_top_bar(stage)
+	_build_top_bar(stage, maxf(BAR_X, LEFT.x + title.get_combined_minimum_size().x + 8.0))
+	_shown_wallet = _wallet_state()
 
 
 
@@ -335,20 +352,36 @@ func _start_daily(ranked: bool) -> void:
 
 
 
-func _build_top_bar(stage: Control) -> void:
-	# Top right, as in iPhone apps: the account chip, then round icon buttons.
+func _build_top_bar(stage: Control, start_x: float) -> void:
+	# Top right, as in iPhone apps: the daily gift and the wallet (the way into the Shop),
+	# the account chip, then round icon buttons. Everything but the chip has a fixed
+	# width, and the chip gets the room that is left, so the bar never runs into the
+	# title, whatever the balances, the name or the text size.
 	var bar := HBoxContainer.new()
+	bar.name = "TopBar"
 	bar.alignment = BoxContainer.ALIGNMENT_END
-	bar.add_theme_constant_override("separation", 6)
-	bar.position = Vector2(220, 7)
-	bar.size = Vector2(RIGHT_X + RIGHT_W - 220, 30)
+	bar.add_theme_constant_override("separation", BAR_GAP)
+	bar.position = Vector2(start_x, 7)
+	bar.size = Vector2(BAR_END - start_x, 30)
 	stage.add_child(bar)
+	var lead: Array[Control] = []
 	if _can_install():
-		bar.add_child(_install_button())
-	bar.add_child(_account_chip())
-	bar.add_child(UiTheme.icon_button("trophy", func() -> void: _open(LeaderboardSheet.new()), 28.0))
-	bar.add_child(UiTheme.icon_button("help", func() -> void: _open(HowToPlay.new()), 28.0))
-	bar.add_child(UiTheme.icon_button("settings", func() -> void: _open(SettingsSheet.new()), 28.0))
+		lead.append(_install_button())
+	lead.append(_gift_button())
+	lead.append(_wallet_pill())
+	var tail: Array[Control] = []
+	tail.append(UiTheme.icon_button("trophy", func() -> void: _open(LeaderboardSheet.new()), 28.0))
+	tail.append(UiTheme.icon_button("help", func() -> void: _open(HowToPlay.new()), 28.0))
+	tail.append(UiTheme.icon_button("settings", func() -> void: _open(SettingsSheet.new()), 28.0))
+	var room := bar.size.x - BAR_GAP * (lead.size() + tail.size())
+	for item: Control in lead:
+		room -= item.custom_minimum_size.x
+		bar.add_child(item)
+	for item: Control in tail:
+		room -= item.custom_minimum_size.x
+	bar.add_child(_account_chip(room))
+	for item: Control in tail:
+		bar.add_child(item)
 
 
 ## In a browser that can add the game as an app (and isn't already running as
@@ -361,29 +394,85 @@ func _can_install() -> bool:
 	return state != "installed" and state != "none"
 
 
+## A round gold button with the download glyph: round so the bar keeps room for the
+## wallet and the account chip.
 func _install_button() -> Button:
-	var b := UiTheme.button("Install app", func() -> void:
+	return UiTheme.icon_button("download", func() -> void:
 		Feel.play("click")
-		JavaScriptBridge.eval("window.dofInstall && window.dofInstall()", true), 10, UiTheme.GOLD)
-	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	b.custom_minimum_size = Vector2(0, 28)
-	b.add_theme_constant_override("h_separation", 4)
-	var glyph := UiIcon.new("download", UiTheme.INK)
-	glyph.custom_minimum_size = Vector2(14, 14)
-	glyph.position = Vector2(9, 7)
-	glyph.size = Vector2(14, 14)
-	b.add_child(glyph)
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		var st := b.get_theme_stylebox(state) as StyleBoxFlat
-		if st != null:
-			st.content_margin_left = 26
+		JavaScriptBridge.eval("window.dofInstall && window.dofInstall()", true), 28.0, UiTheme.GOLD)
+
+
+## The daily gift. A small red dot says one is waiting; the sheet never opens by itself.
+func _gift_button() -> Button:
+	var b := UiTheme.icon_button("gift", func() -> void: _open(GiftSheet.new()), 28.0)
+	b.name = "GiftButton"
+	if Game.gift_ready():
+		var dot := Control.new()
+		dot.name = "GiftDot"
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.position = Vector2(19, 0)
+		dot.size = Vector2(10, 10)
+		dot.draw.connect(func() -> void:
+			dot.draw_circle(dot.size / 2.0, 5.0, UiTheme.INK, true, -1.0, true)
+			dot.draw_circle(dot.size / 2.0, 3.6, UiTheme.MULT, true, -1.0, true))
+		b.add_child(dot)
 	return b
 
 
-func _account_chip() -> Button:
+## The wallet: coins and diamonds after a gold Shop badge (the bag). The whole pill opens
+## the Shop. Its width is measured from the numbers, so the bar can budget for it.
+func _wallet_pill() -> Button:
+	var w := Game.profile.wallet
+	var pill := UiTheme.button("", func() -> void: _open(ShopSheet.new()))
+	pill.name = "WalletPill"
+	pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 4
+	row.offset_right = -9
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pill.add_child(row)
+	row.add_child(_disc("shop"))
+	for kind: String in ["coins", "diamonds"]:
+		var amount := UiTheme.currency(kind, w.balance(kind), 10)
+		amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(amount)
+	var widths := 0.0
+	for kind: String in ["coins", "diamonds"]:
+		widths += UiTheme.px(10) * 1.25 + 3.0 + UiTheme.bold.get_string_size(UiTheme.number(w.balance(kind)), HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(10)).x
+	pill.custom_minimum_size = Vector2(ceilf(4.0 + 22.0 + 6.0 * 2.0 + widths + 9.0 + 1.0), 30)
+	return pill
+
+
+## A gold disc with a dark glyph: the account chip's avatar, the wallet's Shop badge.
+func _disc(glyph_name: String) -> Panel:
+	var disc := Panel.new()
+	disc.custom_minimum_size = Vector2(22, 22)
+	disc.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	disc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = UiTheme.GOLD
+	fill.set_corner_radius_all(99)
+	fill.anti_aliasing = true
+	disc.add_theme_stylebox_override("panel", fill)
+	var glyph := UiIcon.new(glyph_name, UiTheme.INK)
+	glyph.set_anchors_preset(Control.PRESET_FULL_RECT)
+	glyph.offset_left = 4
+	glyph.offset_top = 4
+	glyph.offset_right = -4
+	glyph.offset_bottom = -4
+	disc.add_child(glyph)
+	return disc
+
+
+## The account chip, at most `room` wide. A long name ends in an ellipsis; a guest's
+## reminder gets shorter before it's cut; with very little room only the avatar shows.
+func _account_chip(room: float) -> Button:
 	var name_text := str(Online.user.get("name", "Offline")) if Online.signed_in() else "Offline"
 	var nudge := Online.signed_in() and Online.is_guest()
 	var chip := UiTheme.button("", func() -> void: _open(ProfileSheet.new()))
+	chip.name = "AccountChip"
 	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
@@ -392,44 +481,56 @@ func _account_chip() -> Button:
 	row.offset_right = -10
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chip.add_child(row)
-	# Avatar: a gold disc with the profile glyph.
-	var avatar := Panel.new()
-	avatar.custom_minimum_size = Vector2(22, 22)
-	avatar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	avatar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var disc := StyleBoxFlat.new()
-	disc.bg_color = UiTheme.GOLD
-	disc.set_corner_radius_all(99)
-	disc.anti_aliasing = true
-	avatar.add_theme_stylebox_override("panel", disc)
-	var glyph := UiIcon.new("profile", UiTheme.INK)
-	glyph.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glyph.offset_left = 4
-	glyph.offset_top = 4
-	glyph.offset_right = -4
-	glyph.offset_bottom = -4
-	avatar.add_child(glyph)
-	row.add_child(avatar)
+	row.add_child(_disc("profile"))
+	if room < CHIP_MIN:
+		row.offset_right = -4
+		chip.custom_minimum_size = Vector2(30, 30)
+		return chip
+	var reminder := "Save your progress"
+	var name_width := UiTheme.bold.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(10)).x
+	var widest := name_width
+	if nudge:
+		widest = maxf(name_width, UiTheme.font.get_string_size(reminder, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(8)).x)
+		if widest + 46.0 > room:
+			reminder = "Save progress"
+			widest = maxf(name_width, UiTheme.font.get_string_size(reminder, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(8)).x)
 	var lines := VBoxContainer.new()
 	lines.add_theme_constant_override("separation", -4)
 	lines.alignment = BoxContainer.ALIGNMENT_CENTER
+	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var who := UiTheme.label(name_text, 10, UiTheme.TEXT)
 	who.add_theme_font_override("font", UiTheme.bold)
 	lines.add_child(who)
 	if nudge:
-		lines.add_child(UiTheme.label("Save your progress", 8, UiTheme.GOLD))
+		lines.add_child(UiTheme.label(reminder, 8, UiTheme.GOLD))
+	for line: Label in lines.get_children():
+		line.clip_text = true
+		line.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(lines)
-	var widest := UiTheme.bold.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(10)).x
-	if nudge:
-		widest = maxf(widest, UiTheme.font.get_string_size("Save your progress", HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.px(8)).x)
-	chip.custom_minimum_size = Vector2(minf(170.0, widest + 46.0), 30)
+	chip.custom_minimum_size = Vector2(floorf(minf(minf(CHIP_MAX, widest + 46.0), room)), 30)
 	return chip
 
 
 func _open(sheet: Control) -> void:
 	Feel.play("click")
+	# Whatever happened in the sheet (a purchase, the gift, a new card back) shows here
+	# once it closes.
+	if sheet.has_signal("closed"):
+		sheet.connect("closed", _after_sheet)
 	UiTheme.show_sheet(sheet)
+
+
+## The menu shows the wallet and the gift's dot, so rebuild it when either changed while a
+## sheet was open (sheets opened from sheets, like the Shop from Settings, included).
+func _after_sheet() -> void:
+	if is_inside_tree() and _wallet_state() != _shown_wallet:
+		_build()
+
+
+func _wallet_state() -> String:
+	var w := Game.profile.wallet
+	return "%d/%d/%s" % [w.coins, w.diamonds, Game.gift_ready()]
 
 
 func _box(parent: Control, border: Color) -> VBoxContainer:
