@@ -8,8 +8,11 @@ extends Sheet
 ## opens by itself: the home decides when, and never right after a loss.
 ##
 ## refresh() asks the server at most every 10 minutes and keeps the last copy on the device,
-## so the cards, the banners and the unread dot work offline. What the player has read lives
-## in the profile (Game.profile.state("playbill")), so it follows them to their other devices.
+## so the cards, the banners and the unread dot work offline. The getters the home polls
+## (banners(), unread_count(), should_show_whats_new()) start that refresh in the background
+## whenever it is due, so the home stays current just by asking. What the player has read
+## lives in the profile (Game.profile.state("playbill")), so it follows them to their other
+## devices.
 
 ## A card's button needs the screen behind this sheet: "daily" (start or show today's daily
 ## run), which only the home can do. The Shop, the collection and web links open from here.
@@ -37,9 +40,13 @@ const PALETTE := {
 }
 const KIND_COLOURS := { "news": "blue", "whats_new": "purple", "banner": "pink" }
 const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const DAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 ## Where the last copy is kept ("" keeps it in memory only, as the tests do).
 static var cache_path := CACHE_FILE
+## Seconds this device's local time is ahead of UTC, or null to ask the system (the tests
+## fix it). Dates are always shown in the player's own time zone.
+static var zone_offset: Variant = null
 ## The last copy: { items, fetched_at (this device's clock), offset (server minus device seconds) }.
 static var _copy: Dictionary = {}
 static var _copy_loaded := false
@@ -101,6 +108,7 @@ func _fetch() -> void:
 ## News and What's new items not read yet, for a dot on the home screen. Banners don't
 ## count: they are on the home screen already.
 static func unread_count() -> int:
+	_refresh_in_background()
 	var read := _read_marks()
 	var count := 0
 	for item: Dictionary in items():
@@ -115,6 +123,7 @@ static func unread_count() -> int:
 ## by this device's clock (unix seconds, 0 for no end) and `action` is "", "shop",
 ## "collection", "daily" or a web link (perform() does all but "daily").
 static func banners() -> Array:
+	_refresh_in_background()
 	var out: Array = []
 	var offset := float(_copy.get("offset", 0.0))
 	for item: Dictionary in items():
@@ -129,36 +138,43 @@ static func banners() -> Array:
 
 
 ## True when there is a What's new note this player hasn't been shown: once after an update
-## brings one. Never during the guided first run, and never for a brand-new player (the whole
-## game is new to them). Opening PlaybillSheet.new("whats_new") makes it false again.
+## brings one, and once more when a note scheduled for later starts or an update reaches the
+## version a note describes. Never during the guided first run, and never about the game a
+## new player started with. Opening PlaybillSheet.new("whats_new") makes it false again.
 static func should_show_whats_new() -> bool:
+	_refresh_in_background()
 	return not whats_new_item().is_empty()
 
 
-## The What's new note to show now, or {} (see should_show_whats_new).
+## The What's new note to show now, or {} (see should_show_whats_new): the newest note for
+## this build that this profile hasn't been shown, and for a new player only one that went
+## up after their first list of news.
 static func whats_new_item() -> Dictionary:
-	if Settings.tutorial_step >= 0:
+	if Settings.tutorial_step >= 0 or _new_player_waiting():
 		return {}
-	var seen := int(_state().get("whats_new_seen", -1))
-	if seen < 0:
-		# No mark yet: a player who has finished runs before this version sees the newest
-		# note; a new player gets their mark from the first list (adopt).
-		if Game.profile.runs_played == 0:
-			return {}
-		seen = 0
+	var shown := _shown_notes()
+	var since := int(_state().get("whats_new_since", 0))
 	for item: Dictionary in items():
-		if item["kind"] == "whats_new" and int(item["id"]) > seen:
+		if item["kind"] == "whats_new" and not shown.has(str(item["id"])) and int(item["starts_at"]) > since:
 			return item
 	return {}
 
 
-## Count the current What's new notes as shown, for a caller that shows one its own way.
+## Count the What's new notes up now as shown, for a caller that shows one its own way.
 static func mark_whats_new_seen() -> void:
-	var newest := _newest_note_id(items())
-	var st := _state()
-	if newest > int(st.get("whats_new_seen", -1)):
-		st["whats_new_seen"] = newest
+	if _mark_notes_shown(items()):
 		Game.save_profile()
+
+
+## Call once when this device starts a brand-new profile (Game._ready found no saved one, or
+## the home's Play first starts a new player's guided run), before their first list of news
+## arrives. That list then counts every What's new note already up as seen, however late it
+## comes: Play first plays a whole run before the home asks. A profile from the cloud brings
+## its own marks instead.
+static func mark_new_player() -> void:
+	var st := _state()
+	if not st.has("whats_new_since") and _shown_notes().is_empty():
+		st["new_player"] = true
 
 
 ## Do what a card's button says: open the Shop or the collection over whatever is on screen,
@@ -234,9 +250,9 @@ static func refresh(force := false) -> bool:
 
 ## Take a fresh list from the server: keep it as the copy (also on disk unless `save` is
 ## false), note how far this device's clock is from the server's, and drop read marks of
-## items that are gone. A new player's first list sets their What's new mark to its newest
-## note, so they aren't told about "new" things in a game that is all new to them. Returns
-## whether the items changed.
+## items that are gone. A new player's first list (see mark_new_player) sets the moment
+## from which What's new notes are new to them, so they aren't told about "new" things in a
+## game that is all new to them. Returns whether the items changed.
 static func adopt(list: Array, server_time: float, save := true) -> bool:
 	_copy_loaded = true
 	var fresh: Array = []
@@ -254,8 +270,9 @@ static func adopt(list: Array, server_time: float, save := true) -> bool:
 		_write_copy()
 	var st := _state()
 	var marks_changed := false
-	if not st.has("whats_new_seen") and Game.profile.runs_played == 0:
-		st["whats_new_seen"] = _newest_note_id(fresh.filter(func(item: Variant) -> bool: return for_this_build(item)))
+	if _new_player_waiting():
+		st["whats_new_since"] = roundi(server_time if server_time > 0.0 else now)
+		st.erase("new_player")
 		marks_changed = true
 	var read := _read_marks()
 	var keep := {}
@@ -303,11 +320,12 @@ static func is_action(action: String) -> bool:
 	return action in ["shop", "collection", "daily"] or is_web_link(action)
 
 
-## Only https links open, and only short ones without spaces or quotes.
+## Only https links open: 12 to 300 characters without spaces, tabs, line breaks, quotes or
+## < > (the same rule as the API and the news table's CHECK).
 static func is_web_link(action: String) -> bool:
 	if not action.begins_with("https://") or action.length() > 300 or action.length() < 12:
 		return false
-	for bad: String in [" ", "\"", "'", "<", ">", "\n", "\t"]:
+	for bad: String in [" ", "\"", "'", "<", ">", "\n", "\t", "\r", char(11), char(12)]:
 		if action.contains(bad):
 			return false
 	return true
@@ -353,24 +371,49 @@ static func compare_versions(a: String, b: String) -> int:
 	return 0
 
 
-## When an item went up, or until when a banner runs, in words. Dates only, no countdown:
-## nothing on the Playbill should hurry anyone.
-static func when_words(item: Dictionary) -> String:
-	var now := server_now()
+## When an item went up ("Today", "Yesterday", "3 days ago", "21 Nov"), or for a banner the
+## last day it runs ("Until 21 Dec", or "Until Sat 21 Dec" with `weekday`). Calendar dates in
+## the player's own time zone, never a countdown or "ends today": nothing on the Playbill
+## should hurry anyone.
+static func when_words(item: Dictionary, weekday := false) -> String:
 	var ends := int(item.get("ends_at", 0))
 	if item.get("kind") == "banner" and ends > 0:
-		return "Ends today" if ends - now < 86400 else "Until " + _date(ends)
-	var days := floori((now - int(item.get("starts_at", now))) / 86400.0)
+		# The last second it is up, so a banner that ends at midnight shows the day before.
+		return "Until " + date_words(ends - 1, weekday)
+	return ago_words(int(item.get("starts_at", 0)), server_now())
+
+
+## How long before `now` a moment was, in calendar days of the player's time zone: "Today",
+## "Yesterday", "3 days ago", then its date.
+static func ago_words(unix: int, now: int) -> String:
+	var days := days_between(unix, now)
 	if days <= 0:
 		return "Today"
 	if days == 1:
 		return "Yesterday"
-	return "%d days ago" % days if days < 7 else _date(int(item.get("starts_at", now)))
+	return "%d days ago" % days if days < 7 else date_words(unix)
 
 
-static func _date(unix: int) -> String:
-	var d := Time.get_datetime_dict_from_unix_time(unix)
-	return "%d %s" % [int(d["day"]), MONTHS[clampi(int(d["month"]) - 1, 0, 11)]]
+## A moment as the player's calendar date: "21 Dec", or "Sat 21 Dec" with `weekday`.
+static func date_words(unix: int, weekday := false) -> String:
+	var d := Time.get_datetime_dict_from_unix_time(unix + local_offset())
+	var text := "%d %s" % [int(d["day"]), MONTHS[clampi(int(d["month"]) - 1, 0, 11)]]
+	return "%s %s" % [DAYS[clampi(int(d["weekday"]), 0, 6)], text] if weekday else text
+
+
+## Calendar days from `earlier` to `later` in the player's time zone (0 on the same day).
+static func days_between(earlier: int, later: int) -> int:
+	var offset := local_offset()
+	return floori((later + offset) / 86400.0) - floori((earlier + offset) / 86400.0)
+
+
+## Seconds this device's local time is ahead of UTC, summer time included: its local clock
+## read as if it were UTC, less the real time (this works on every platform, the web too).
+static func local_offset() -> int:
+	if zone_offset is int:
+		return zone_offset
+	var local := Time.get_unix_time_from_datetime_dict(Time.get_datetime_dict_from_system())
+	return roundi((local - Time.get_unix_time_from_system()) / 60.0) * 60
 
 
 static func _due() -> bool:
@@ -379,6 +422,19 @@ static func _due() -> bool:
 	if fetched > 0.0 and now >= fetched and now - fetched < REFRESH_SECONDS:
 		return false
 	return _try_ok or _tried_at < 0.0 or Time.get_ticks_msec() / 1000.0 - _tried_at >= RETRY_SECONDS
+
+
+## The home polls the getters every few seconds. When the copy is due they ask the server
+## in the background (refresh() keeps to its ten minutes, and to a minute after a failed
+## try), and the next look sees the answer.
+static func _refresh_in_background() -> void:
+	_load_copy()
+	if not _fetching and _due():
+		_refresh_detached()
+
+
+static func _refresh_detached() -> void:
+	var _changed: bool = await refresh()
 
 
 static func _load_copy() -> void:
@@ -416,6 +472,36 @@ static func _read_marks() -> Dictionary:
 	return read if read is Dictionary else {}
 
 
+## The What's new notes this profile has been shown, by id. They are kept even after a note
+## leaves the list, so an old note that comes back into the newest 20 isn't "new" again.
+static func _shown_notes() -> Dictionary:
+	var shown: Variant = _state().get("whats_new")
+	return shown if shown is Dictionary else {}
+
+
+## Adds the What's new notes in `list` to the shown ones; true when that changed anything
+## (the caller saves the profile).
+static func _mark_notes_shown(list: Array) -> bool:
+	var shown := _shown_notes().duplicate()
+	var before := shown.size()
+	for item: Dictionary in list:
+		if item["kind"] == "whats_new":
+			shown[str(item["id"])] = true
+	if shown.size() == before:
+		return false
+	_state()["whats_new"] = shown
+	return true
+
+
+## A new player's What's new waits for their first list of news (see adopt): one marked by
+## mark_new_player(), or a profile with no finished runs that has never been shown a note.
+static func _new_player_waiting() -> bool:
+	var st := _state()
+	if st.has("whats_new_since"):
+		return false
+	return bool(st.get("new_player", false)) or (Game.profile.runs_played == 0 and not st.has("whats_new"))
+
+
 static func _unread_ids() -> Dictionary:
 	var read := _read_marks()
 	var out := {}
@@ -423,14 +509,6 @@ static func _unread_ids() -> Dictionary:
 		if not read.has(str(item["id"])):
 			out[int(item["id"])] = true
 	return out
-
-
-static func _newest_note_id(list: Array) -> int:
-	var newest := 0
-	for item: Dictionary in list:
-		if item["kind"] == "whats_new":
-			newest = maxi(newest, int(item["id"]))
-	return newest
 
 
 ## The newest What's new note this build shows, seen or not ({} when there is none).
@@ -455,7 +533,7 @@ static func _text(d: Dictionary, key: String) -> String:
 
 
 ## Opening the Playbill counts its cards as read (their "New" tags stay until it closes), and
-## its What's new note as shown, so the home doesn't offer that again.
+## its What's new notes as shown, so the home doesn't offer them again.
 func _mark_seen() -> void:
 	var st := _state()
 	var read := _read_marks().duplicate()
@@ -465,12 +543,11 @@ func _mark_seen() -> void:
 		if not read.has(str(item["id"])):
 			read[str(item["id"])] = true
 			changed = true
-	var newest := _newest_note_id(shown)
-	if newest > int(st.get("whats_new_seen", -1)):
-		st["whats_new_seen"] = newest
-		changed = true
 	if changed:
 		st["read"] = read
+	if _mark_notes_shown(shown):
+		changed = true
+	if changed:
 		Game.save_profile()
 
 
@@ -562,7 +639,8 @@ func _card(item: Dictionary) -> Control:
 
 
 ## One card in full: all of its words, its picture large, its button, and the way back to
-## the other cards.
+## the other cards. The title and the words scroll inside the card (a card may hold 80 and
+## 600 characters), so the button and the way back always stay on the stage.
 func _build_focus(item: Dictionary, others: bool) -> void:
 	title_text = "What's new" if item["kind"] == "whats_new" else "Playbill"
 	var colours := colours_for(str(item["colour"]), str(item["kind"]))
@@ -584,24 +662,31 @@ func _build_focus(item: Dictionary, others: bool) -> void:
 	if item["kind"] == "whats_new" and str(item["version"]) != "":
 		tag += " in " + str(item["version"])
 	top.add_child(_tag(tag, ink))
-	var stamp := UiTheme.label(when_words(item), 9, Color(ink, 0.82))
+	var stamp := UiTheme.label(when_words(item, true), 9, Color(ink, 0.82))
+	stamp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stamp.clip_text = true
+	stamp.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_plain(stamp, ink)
 	top.add_child(stamp)
 	text.add_child(top)
+	var words := scroll_area(ink, colours[1])
+	words.name = "Words"
+	words.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.add_child(inner)
 	var title := UiTheme.title(str(item["title"]), 20, ink)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.custom_minimum_size = Vector2(360, 0)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_plain(title, ink)
-	text.add_child(title)
+	inner.add_child(title)
 	var blurb := UiTheme.label(str(item["body"]), 10, Color(ink, 0.94))
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	blurb.custom_minimum_size = Vector2(360, 0)
+	blurb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_plain(blurb, ink)
-	text.add_child(blurb)
-	var gap := Control.new()
-	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	text.add_child(gap)
+	inner.add_child(blurb)
+	text.add_child(words)
 	if str(item["action"]) != "":
 		var b := _action_button(str(item["action"]), 11, 28.0)
 		b.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -616,13 +701,42 @@ func _build_focus(item: Dictionary, others: bool) -> void:
 	foot.add_theme_constant_override("separation", 8)
 	if others:
 		foot.add_child(UiTheme.icon_button("back", _show_all, 22.0))
-		foot.add_child(_text_button("All news", _show_all))
+		foot.add_child(link_button("All news", _show_all))
 	var status := _status_label()
 	foot.add_child(status)
 	body.add_child(foot)
 	if not Settings.reduce_motion:
 		tile.modulate.a = 0.0
 		tile.create_tween().tween_property(tile, "modulate:a", 1.0, 0.16)
+
+
+## A vertical scroll area for long words on a card or a letter: no sideways scrolling, room
+## kept for a slim pill of a scroll bar in the text's colour (so the words never re-wrap when
+## it appears), a soft fade at an edge with more words past it, and drag to scroll on touch
+## screens. The mouse wheel scrolls it too.
+static func scroll_area(ink: Color, fade: Color) -> ScrollContainer:
+	var s := ScrollContainer.new()
+	s.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	s.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_RESERVE
+	s.scroll_hint_mode = ScrollContainer.SCROLL_HINT_MODE_ALL
+	s.add_theme_color_override("scroll_hint_vertical_color", Color(fade.darkened(0.35), 0.55))
+	s.add_theme_constant_override("scrollbar_v_separation", 6)
+	var bar := s.get_v_scroll_bar()
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(ink, 0.1)
+	track.set_corner_radius_all(99)
+	track.content_margin_left = 2
+	track.content_margin_right = 2
+	var grab := track.duplicate() as StyleBoxFlat
+	grab.bg_color = Color(ink, 0.5)
+	var held := track.duplicate() as StyleBoxFlat
+	held.bg_color = Color(ink, 0.75)
+	for state: String in ["scroll", "scroll_focus"]:
+		bar.add_theme_stylebox_override(state, track)
+	bar.add_theme_stylebox_override("grabber", grab)
+	bar.add_theme_stylebox_override("grabber_highlight", held)
+	bar.add_theme_stylebox_override("grabber_pressed", held)
+	return s
 
 
 func _build_empty() -> void:
@@ -845,7 +959,8 @@ static func _plain(l: Label, ink: Color) -> void:
 		l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0))
 
 
-func _text_button(text: String, on_press: Callable) -> Button:
+## A gold text link, such as "All news" back from a card shown in full.
+static func link_button(text: String, on_press: Callable) -> Button:
 	var b := UiTheme.button(text, on_press, 9)
 	var none := StyleBoxEmpty.new()
 	none.content_margin_left = 2

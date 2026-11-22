@@ -1,20 +1,25 @@
 class_name InboxSheet
 extends Sheet
 ## The inbox: letters from the troupe (GET /v1/letters), each a short message, some with
-## coins inside, four to a page. Claiming asks the server first and pays only on its word:
-## the coins go to Game.wallet() and the letter's id is recorded in the profile
-## (Game.profile.state("inbox")). The server pays a letter once per account and the record
-## pays it once per profile, so a letter never pays twice: not on a second tap, not offline,
-## not after a cloud-save conflict, and not when this device's progress moves to a new guest
-## account (which the server sees as a new player). Each claim carries a key that stays in
-## the record until its answer arrives, so a claim whose answer was lost is asked again with
-## that key and its coins aren't lost either (Online.claim_letter). A letter without coins
-## is claimed as read. Like the gift, the inbox never opens by itself.
+## coins inside, four to a page. Tapping a letter shows all of it. Claiming asks the server
+## first and pays only on its word: the coins go to Game.wallet() and the letter's id is
+## recorded in the profile (Game.profile.state("inbox")). The server pays a letter once per
+## account and the record pays it once per profile, so a letter never pays twice: not on a
+## second tap, not offline, not after a cloud-save conflict, and not when this device's
+## progress moves to a new guest account (which the server sees as a new player). Each claim
+## carries a key that stays in the record until its answer arrives, so a claim whose answer
+## was lost is asked again with that key and its coins aren't lost either
+## (Online.claim_letter). A letter without coins is claimed as read. Like the gift, the inbox
+## never opens by itself; unclaimed_count(), which the home polls for its badge, also asks
+## the server in the background when the copy is due.
+##
+## Test-money builds (Game.money_mode "test") pay into the test wallet and keep a record of
+## their own (state "inbox_test"). On the real server they only show letters (can_claim).
 
 const REFRESH_SECONDS := 600
 ## Opening the inbox asks again when the copy is older than this: the player is looking.
 const OPEN_REFRESH_SECONDS := 60
-## After a failed try (offline), the next one may come after a minute.
+## After a failed try (offline), the next one for the same account may come after a minute.
 const RETRY_SECONDS := 60
 const PER_PAGE := 4
 const ROW_HEIGHT := 52.0
@@ -23,7 +28,7 @@ const CACHE_FILE := "user://inbox.json"
 const MAX_COINS := 5000
 ## Claims whose answer never came, asked again per refresh.
 const SETTLE_AT_ONCE := 5
-const MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+const TEST_BUILD_WORDS := "Letters are claimed in the released game, not in this test build."
 
 ## Where the last copy is kept ("" keeps it in memory only, as the tests do).
 static var cache_path := CACHE_FILE
@@ -34,20 +39,31 @@ static var _copy_loaded := false
 static var _version := 0
 static var _fetching := false
 static var _tried_at := -1.0
+## The account the last try asked for: a failed try waits a minute before the next one for
+## that account (signing in to another one asks at once).
+static var _tried_for := ""
 static var _try_ok := false
 ## Letters with a claim on its way (id -> true), so a double tap sends one claim.
 static var _claiming: Dictionary = {}
+## Tells every open inbox when a claim has ended, whichever sheet sent it: the answer can
+## arrive after that sheet closed and another opened, which must not stay on "Claiming…".
+static var _claims := ClaimEvents.new()
 
 var page := 0
+## The id of the letter shown in full, or 0 for the list.
+var _focus := 0
 var _status_text := ""
 var _status_colour := UiTheme.MUTED
 ## Letters claimed while this sheet is open: id -> coins paid, for the row's "+200".
 var _paid_here: Dictionary = {}
+## Letters this sheet is claiming: it redraws itself when each ends (_claim).
+var _waiting: Dictionary = {}
 var _rows: Control
-## The Claim buttons on this page by letter id, to show "Claiming…" and burst from.
+## The Claim buttons shown by letter id, to show "Claiming…" and burst from.
 var _buttons: Dictionary = {}
 var _coins: Label
 var _shown_coins := -1
+var _row_down := Vector2.ZERO
 var _press_at := Vector2.ZERO
 var _pressing := false
 var _last_turn := 0
@@ -60,8 +76,14 @@ func _init() -> void:
 
 func _ready() -> void:
 	super._ready()
+	_claims.ended.connect(_on_claim_ended)
 	_add_wallet()
 	_fetch()
+
+
+func _exit_tree() -> void:
+	if _claims.ended.is_connected(_on_claim_ended):
+		_claims.ended.disconnect(_on_claim_ended)
 
 
 func _fetch() -> void:
@@ -77,8 +99,11 @@ func _fetch() -> void:
 
 ## Letters still waiting for the player, for the badge on the home screen: coins to claim or
 ## a message not read yet. Counted from the last copy of this account's letters, less those
-## this profile has claimed (also under another account).
+## this profile has claimed (also under another account). When the copy is due it also asks
+## the server in the background (at most every 10 minutes, a minute after a failed try), so
+## the badge updates as the home polls it.
 static func unclaimed_count() -> int:
+	_refresh_in_background()
 	var count := 0
 	for letter: Dictionary in letters():
 		if not is_claimed(letter):
@@ -115,10 +140,20 @@ static func claimed_record() -> Dictionary:
 	return record if record is Dictionary else {}
 
 
+## Whether this build claims letters. Test-money builds (debug runs, the dev gallery and
+## test-store builds) pay into the test wallet, so a claim on the real server would use up the
+## real account's letter for good and pay only play money: there they just show letters.
+## Pointed at another server (--api=..., a local copy) they claim into the test wallet.
+static func can_claim() -> bool:
+	if Game.money_mode != "test":
+		return true
+	return Online.api_url != str(ProjectSettings.get_setting(Online.API_SETTING, Online.DEFAULT_API))
+
+
 ## Ask the server for this account's letters when the copy is older than `max_age` seconds
-## (a minute after a failed try), then settle claims whose answers never came. Returns true
-## when the letters changed while it ran, so the caller can redraw (the home: its badge).
-## Offline it keeps the copy; it never throws.
+## (a minute after a failed try for this account), then settle claims whose answers never
+## came. Returns true when the letters changed while it ran, so the caller can redraw (the
+## home: its badge). Offline it keeps the copy; it never throws.
 static func refresh(max_age := REFRESH_SECONDS) -> bool:
 	_load_copy()
 	var before := _version
@@ -127,20 +162,25 @@ static func refresh(max_age := REFRESH_SECONDS) -> bool:
 	if _due(max_age):
 		_fetching = true
 		_tried_at = Time.get_ticks_msec() / 1000.0
+		_tried_for = _user_id()
 		var res: Dictionary = await Online.letters()
 		_fetching = false
 		var data: Variant = res.get("data")
 		_try_ok = bool(res.get("ok", false)) and data is Dictionary and (data as Dictionary).get("letters") is Array
 		if _try_ok:
-			adopt((data as Dictionary)["letters"], _number(data, "time"), _user_id())
+			adopt((data as Dictionary)["letters"], _number(data, "time"), _tried_for)
 			await _settle_pending()
 	return _version != before
 
 
 ## Claim a letter: ask the server, then pay its coins once. Returns { ok, coins, error }, where
 ## coins is what was paid just now: 0 for a message, or when this profile was paid for the
-## letter before. A second call while one is on its way returns at once, asking nothing.
+## letter before. A second call while one is on its way returns at once, asking nothing, and
+## so does a test build on the real server (see can_claim). Every open inbox hears when a
+## claim it didn't send ends.
 static func claim(letter_id: int) -> Dictionary:
+	if not can_claim():
+		return { "ok": false, "coins": 0, "status": 0, "error": TEST_BUILD_WORDS, "test_build": true }
 	if _claiming.has(letter_id):
 		return { "ok": false, "coins": 0, "error": "", "busy": true }
 	if claimed_record().has(str(letter_id)):
@@ -154,6 +194,7 @@ static func claim(letter_id: int) -> Dictionary:
 	var out := settle(letter_id, res)
 	if bool(out["ok"]) or int(out.get("status", 0)) in [404, 410]:
 		Game.save_profile()
+	_claims.ended.emit(letter_id, out)
 	return out
 
 
@@ -231,15 +272,15 @@ static func server_now() -> int:
 	return int(Time.get_unix_time_from_system() + float(_copy.get("offset", 0.0)))
 
 
-## When a letter came, in words, and for an unclaimed letter that goes within three days,
-## until when it waits. Dates only: nothing here should hurry anyone.
-static func when_words(letter: Dictionary) -> String:
+## When a letter came, in calendar days of the player's time zone, and for an unclaimed
+## letter that goes within three days, the last day it waits ("until 21 Dec", or "until Sat
+## 21 Dec" with `weekday`). Dates only, never "tonight": nothing here should hurry anyone.
+static func when_words(letter: Dictionary, weekday := false) -> String:
 	var now := server_now()
-	var days := floori((now - int(letter.get("created_at", now))) / 86400.0)
-	var came := "Today" if days <= 0 else ("Yesterday" if days == 1 else ("%d days ago" % days if days < 7 else _date(int(letter["created_at"]))))
+	var came := PlaybillSheet.ago_words(int(letter.get("created_at", now)), now)
 	var expires := int(letter.get("expires_at", 0))
 	if expires > 0 and expires - now < 3 * 86400 and not is_claimed(letter):
-		came += "  ·  " + ("until tonight" if expires - now < 86400 else "until " + _date(expires))
+		came += "  ·  until " + PlaybillSheet.date_words(expires - 1, weekday)
 	return came
 
 
@@ -247,6 +288,8 @@ static func when_words(letter: Dictionary) -> String:
 ## their coins aren't lost: those the server now lists as claimed, and those it no longer
 ## lists. One still listed as unclaimed keeps its key for the player's next tap.
 static func _settle_pending() -> void:
+	if not can_claim():
+		return
 	var listed := {}
 	var list: Array = _copy.get("letters", [])
 	for letter: Dictionary in list:
@@ -323,13 +366,33 @@ static func _trouble(res: Dictionary) -> String:
 
 
 static func _due(max_age: float) -> bool:
-	if str(_copy.get("user", "")) != _user_id():
+	var user := _user_id()
+	if str(_copy.get("user", "")) == user:
+		var fetched := float(_copy.get("fetched_at", 0.0))
+		var now := Time.get_unix_time_from_system()
+		if fetched > 0.0 and now >= fetched and now - fetched < max_age:
+			return false
+	if _try_ok or _tried_at < 0.0 or _tried_for != user:
 		return true
-	var fetched := float(_copy.get("fetched_at", 0.0))
-	var now := Time.get_unix_time_from_system()
-	if fetched > 0.0 and now >= fetched and now - fetched < max_age:
-		return false
-	return _try_ok or _tried_at < 0.0 or Time.get_ticks_msec() / 1000.0 - _tried_at >= RETRY_SECONDS
+	return Time.get_ticks_msec() / 1000.0 - _tried_at >= RETRY_SECONDS
+
+
+## Whether this account's letters have been asked for since the game started (or are in the
+## copy from an earlier visit), so the empty inbox can tell "fetching" from "offline".
+static func _asked_for_this_account() -> bool:
+	return (_tried_at >= 0.0 and _tried_for == _user_id()) or str(_copy.get("user", "")) == _user_id()
+
+
+## The home polls unclaimed_count() every few seconds; when the copy is due this asks the
+## server in the background, and the next look sees the answer.
+static func _refresh_in_background() -> void:
+	_load_copy()
+	if not _fetching and _due(REFRESH_SECONDS):
+		_refresh_detached()
+
+
+static func _refresh_detached() -> void:
+	var _changed: bool = await refresh()
 
 
 static func _user_id() -> String:
@@ -362,13 +425,10 @@ static func _write_copy() -> void:
 		f.store_string(JSON.stringify(_copy))
 
 
+## This build's record: test-money builds keep their claims apart from the real ones, as they
+## keep their own wallet, so a letter claimed for play money is still owed to the real wallet.
 static func _state() -> Dictionary:
-	return Game.profile.state("inbox")
-
-
-static func _date(unix: int) -> String:
-	var d := Time.get_datetime_dict_from_unix_time(unix)
-	return "%d %s" % [int(d["day"]), MONTHS[clampi(int(d["month"]) - 1, 0, 11)]]
+	return Game.profile.state("inbox_test" if Game.money_mode == "test" else "inbox")
 
 
 static func _number(d: Variant, key: String) -> float:
@@ -391,6 +451,12 @@ static func _text(d: Variant, key: String) -> String:
 
 func _build() -> void:
 	var list := letters()
+	if _focus > 0:
+		var shown := _find_in(list, _focus)
+		if not shown.is_empty():
+			_build_letter(shown)
+			return
+		_focus = 0
 	if list.is_empty():
 		_build_empty()
 		_build_footer(1)
@@ -412,6 +478,7 @@ func _build() -> void:
 
 ## One letter: an envelope (gold with coins inside, blue for a message, open once claimed),
 ## its title and two lines, when it came, and its coins with a Claim button, or a tick.
+## Tapping it anywhere else shows the whole letter.
 func _row(letter: Dictionary) -> Control:
 	var id := int(letter["id"])
 	var coins := int(letter["coins"])
@@ -425,11 +492,14 @@ func _row(letter: Dictionary) -> Control:
 	box.content_margin_bottom = 5
 	panel.add_theme_stylebox_override("panel", box)
 	panel.custom_minimum_size = Vector2(0, ROW_HEIGHT)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	panel.gui_input.connect(_on_row_input.bind(id))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	panel.add_child(row)
 	var badge := CenterContainer.new()
-	badge.add_child(Envelope.new("open" if done else ("coins" if coins > 0 else "message"), 36.0))
+	badge.add_child(Envelope.new(_look(letter), 36.0))
 	row.add_child(badge)
 	var text := VBoxContainer.new()
 	text.add_theme_constant_override("separation", 0)
@@ -456,29 +526,111 @@ func _row(letter: Dictionary) -> Control:
 	blurb.custom_minimum_size = Vector2(250, 0)
 	text.add_child(blurb)
 	row.add_child(text)
-	var side := HBoxContainer.new()
-	side.add_theme_constant_override("separation", 8)
+	var side := _claim_side(letter, 10, Vector2(72, 24))
 	side.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	if done:
-		var paid := int(_paid_here.get(str(id), 0))
-		side.add_child(_done_pill(("+%s" % UiTheme.number(paid)) if paid > 0 else ("Claimed" if coins > 0 else "Read")))
-	else:
-		if coins > 0:
-			var amount := UiTheme.currency("coins", coins, 11)
-			amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-			(amount.get_child(1) as Label).text = "+" + UiTheme.number(coins)
-			side.add_child(amount)
-		var busy := _claiming.has(id)
-		var b := UiTheme.button("Claiming…" if busy else ("Claim" if coins > 0 else "Got it"), _claim.bind(id), 10, UiTheme.GOLD if coins > 0 else UiTheme.PANEL_LIGHT)
-		_buttons[id] = b
-		b.custom_minimum_size = Vector2(72, 24)
-		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		b.disabled = busy
-		side.add_child(b)
 	row.add_child(side)
 	if done:
 		panel.modulate = Color(1, 1, 1, 0.78)
 	return panel
+
+
+## A letter's coins and its Claim (or Got it) button, or a tick once it is claimed. The
+## button waits while a claim is on its way, and stays off in a test build on the real
+## server (can_claim).
+func _claim_side(letter: Dictionary, font_size: int, button_size: Vector2) -> HBoxContainer:
+	var id := int(letter["id"])
+	var coins := int(letter["coins"])
+	var side := HBoxContainer.new()
+	side.add_theme_constant_override("separation", 8)
+	if is_claimed(letter):
+		var paid := int(_paid_here.get(str(id), 0))
+		side.add_child(_done_pill(("+%s" % UiTheme.number(paid)) if paid > 0 else ("Claimed" if coins > 0 else "Read")))
+		return side
+	if coins > 0:
+		var amount := UiTheme.currency("coins", coins, font_size + 1)
+		amount.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		(amount.get_child(1) as Label).text = "+" + UiTheme.number(coins)
+		side.add_child(amount)
+	var busy := _claiming.has(id)
+	var b := UiTheme.button("Claiming…" if busy else ("Claim" if coins > 0 else "Got it"), _claim.bind(id), font_size, UiTheme.GOLD if coins > 0 else UiTheme.PANEL_LIGHT)
+	_buttons[id] = b
+	b.custom_minimum_size = button_size
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.disabled = busy or not can_claim()
+	side.add_child(b)
+	return side
+
+
+## One letter in full: its envelope, when it came, its title and all of its words (they
+## scroll inside the card when long), its coins with the Claim or Got it button, and the way
+## back to the list.
+func _build_letter(letter: Dictionary) -> void:
+	title_text = "Inbox"
+	var coins := int(letter["coins"])
+	var done := is_claimed(letter)
+	var card := PanelContainer.new()
+	var edge := Color(1, 1, 1, 0.12) if done else (Color(UiTheme.GOLD, 0.55) if coins > 0 else UiTheme.TONAL_EDGE)
+	var box := UiTheme.box(Color(1, 1, 1, 0.08), edge, 16)
+	box.content_margin_left = 14
+	box.content_margin_right = 14
+	box.content_margin_top = 12
+	box.content_margin_bottom = 12
+	card.add_theme_stylebox_override("panel", box)
+	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	card.add_child(row)
+	var badge := VBoxContainer.new()
+	badge.add_child(Envelope.new(_look(letter), 56.0))
+	row.add_child(badge)
+	var text := VBoxContainer.new()
+	text.add_theme_constant_override("separation", 7)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(text)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 6)
+	if bool(letter["personal"]):
+		top.add_child(_tag("For you"))
+	var stamp := UiTheme.label(when_words(letter, true), 9, UiTheme.MUTED)
+	stamp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stamp.clip_text = true
+	stamp.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	top.add_child(stamp)
+	text.add_child(top)
+	var words := PlaybillSheet.scroll_area(UiTheme.TEXT, UiTheme.PANEL_DARK)
+	words.name = "Words"
+	words.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 6)
+	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	words.add_child(inner)
+	var title := UiTheme.title(str(letter["title"]), 15, UiTheme.TEXT)
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_child(title)
+	var blurb := UiTheme.label(str(letter["body"]), 10, UiTheme.MUTED if done else Color(UiTheme.TEXT, 0.92))
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_child(blurb)
+	text.add_child(words)
+	var side := _claim_side(letter, 11, Vector2(96, 28))
+	side.size_flags_horizontal = Control.SIZE_SHRINK_END
+	text.add_child(side)
+	body.add_child(card)
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 8)
+	foot.add_child(UiTheme.icon_button("back", _show_all, 22.0))
+	foot.add_child(PlaybillSheet.link_button("All letters", _show_all))
+	var status := UiTheme.label(_status_line(), 9, _status_colour if _status_text != "" else UiTheme.MUTED)
+	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	status.clip_text = true
+	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	foot.add_child(status)
+	body.add_child(foot)
+	if not Settings.reduce_motion:
+		card.modulate.a = 0.0
+		card.create_tween().tween_property(card, "modulate:a", 1.0, 0.16)
 
 
 func _build_empty() -> void:
@@ -491,11 +643,12 @@ func _build_empty() -> void:
 	col.add_child(art)
 	var heading_text := "No letters right now"
 	var more := "Now and then the troupe sends a letter, sometimes with coins inside. It waits here until you open it."
-	# The sheet asks for the letters as it opens (_fetch), so a due fetch is as good as started.
-	if _fetching or (Online.signed_in() and _due(OPEN_REFRESH_SECONDS)):
+	# The sheet asks for this account's letters as it opens (_fetch), so an account never
+	# asked for yet is as good as being fetched.
+	if _fetching or (Online.signed_in() and not _asked_for_this_account()):
 		heading_text = "Fetching your letters…"
 		more = ""
-	elif not _try_ok and _tried_at >= 0.0:
+	elif not _try_ok and _tried_at >= 0.0 and _tried_for == _user_id():
 		heading_text = "Letters arrive when you're online"
 		more = "Your game and your coins are kept on this device in the meantime."
 	var title := UiTheme.title(heading_text, 14, UiTheme.TEXT)
@@ -539,16 +692,27 @@ func _build_footer(pages: int) -> void:
 func _status_line() -> String:
 	if _status_text != "":
 		return _status_text
-	if not _try_ok and _tried_at >= 0.0 and not letters().is_empty():
-		return "You're offline: these are the letters from your last visit."
-	var waiting := unclaimed_count()
-	if letters().is_empty():
+	var list := letters()
+	if list.is_empty():
 		return ""
+	if not _try_ok and _tried_at >= 0.0 and _tried_for == _user_id():
+		return "You're offline: these are the letters from your last visit."
+	var waiting := 0
+	for letter: Dictionary in list:
+		if not is_claimed(letter):
+			waiting += 1
+	if waiting > 0 and not can_claim():
+		return TEST_BUILD_WORDS
 	return "You're all caught up." if waiting == 0 else "%d letter%s waiting for you." % [waiting, "" if waiting == 1 else "s"]
 
 
 func _claim(letter_id: int) -> void:
 	if _claiming.has(letter_id):
+		return
+	if not can_claim():
+		Feel.play("error")
+		_set_status(TEST_BUILD_WORDS, UiTheme.MUTED)
+		rebuild()
 		return
 	Feel.play("click")
 	var at := Vector2.ZERO
@@ -557,7 +721,9 @@ func _claim(letter_id: int) -> void:
 		at = (button as Button).get_global_rect().get_center()
 		(button as Button).disabled = true
 		(button as Button).text = "Claiming…"
+	_waiting[letter_id] = true
 	var result: Dictionary = await InboxSheet.claim(letter_id)
+	_waiting.erase(letter_id)
 	if not _alive() or bool(result.get("busy", false)):
 		return
 	if bool(result["ok"]):
@@ -581,12 +747,36 @@ func _claim(letter_id: int) -> void:
 	rebuild()
 
 
+## A claim this sheet didn't send has ended (one sent before it opened, or one settled in the
+## background): show how it went instead of a stale "Claiming…".
+func _on_claim_ended(letter_id: int, result: Dictionary) -> void:
+	if not _alive() or _waiting.has(letter_id):
+		return
+	var coins := int(result.get("coins", 0))
+	if bool(result.get("ok", false)) and coins > 0:
+		_paid_here[str(letter_id)] = coins
+		_set_status("Added %s coins." % UiTheme.number(coins), UiTheme.GOOD)
+	_refresh_wallet()
+	rebuild()
+
+
 func _find(letter_id: int) -> Dictionary:
 	var list: Array = _copy.get("letters", [])
+	return _find_in(list, letter_id)
+
+
+func _find_in(list: Array, letter_id: int) -> Dictionary:
 	for letter: Dictionary in list:
 		if int(letter["id"]) == letter_id:
 			return letter
 	return {}
+
+
+## The envelope a letter wears: open once claimed or read, gold with coins, blue otherwise.
+func _look(letter: Dictionary) -> String:
+	if is_claimed(letter):
+		return "open"
+	return "coins" if int(letter["coins"]) > 0 else "message"
 
 
 func _set_status(text: String, colour: Color) -> void:
@@ -594,7 +784,34 @@ func _set_status(text: String, colour: Color) -> void:
 	_status_colour = colour
 
 
+func _show_all() -> void:
+	Feel.play("click")
+	_focus = 0
+	_status_text = ""
+	rebuild()
+
+
+## Show one letter in full.
+func open_letter(letter_id: int) -> void:
+	_focus = letter_id
+	_status_text = ""
+	rebuild()
+
+
+func _on_row_input(event: InputEvent, letter_id: int) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		var at := (event as InputEventMouseButton).global_position
+		if (event as InputEventMouseButton).pressed:
+			_row_down = at
+		elif (at - _row_down).length() < 9.0:
+			Feel.play("select")
+			Feel.buzz(8)
+			open_letter(letter_id)
+
+
 func _turn(step: int) -> void:
+	if _focus > 0:
+		return
 	var pages := maxi(1, ceili(letters().size() / float(PER_PAGE)))
 	var to := clampi(page + step, 0, pages - 1)
 	if to == page:
@@ -608,9 +825,10 @@ func _turn(step: int) -> void:
 
 
 ## Swipes (either way) and scrolls turn pages, as in the Jester collection. This looks at
-## input before the rows do without taking it, so a tap still reaches a Claim button.
+## input before the rows do without taking it, so a tap still opens a letter or reaches a
+## Claim button.
 func _input(event: InputEvent) -> void:
-	if _rows == null or not is_instance_valid(_rows) or not is_inside_tree():
+	if _focus > 0 or _rows == null or not is_instance_valid(_rows) or not is_inside_tree():
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
@@ -626,12 +844,14 @@ func _input(event: InputEvent) -> void:
 				_pressing = false
 				var moved := at - _press_at
 				if moved.length() > 40.0:
+					# A swipe, not a tap: the row under it doesn't open.
+					_row_down = Vector2(INF, INF)
 					var sideways := absf(moved.x) > absf(moved.y)
 					_turn(1 if (moved.x < 0.0 if sideways else moved.y < 0.0) else -1)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
+	if _focus == 0 and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode in [KEY_RIGHT, KEY_DOWN, KEY_LEFT, KEY_UP]:
 			_turn(1 if event.keycode in [KEY_RIGHT, KEY_DOWN] else -1)
 			get_viewport().set_input_as_handled()
@@ -741,6 +961,11 @@ func rebuild() -> void:
 	_buttons.clear()
 	_build()
 	heading.text = title_text
+
+
+## Says when a claim has ended, for every open inbox (a static signal, which GDScript lacks).
+class ClaimEvents extends RefCounted:
+	signal ended(letter_id: int, result: Dictionary)
 
 
 ## A letter's badge: a closed envelope on a gold disc when coins are inside, on a blue one for
