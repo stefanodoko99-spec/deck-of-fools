@@ -27,6 +27,7 @@ Online="*res://ui/online.gd"
 CardArt="*res://ui/card_art.gd"
 Ads="*res://ui/ads.gd"
 Store="*res://ui/store.gd"
+Goals="*res://ui/goals_tracker.gd"
 
 [deck_of_fools]
 
