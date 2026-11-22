@@ -58,15 +58,18 @@ func _build() -> void:
 	if Settings.tutorial_step < 0:
 		_row(play, "Guided first run", UiTheme.button("Guide me again", func() -> void: _change(func() -> void: Settings.tutorial_step = 0)))
 
-	var look := _group(right, "Card back")
+	# The card back: "Next design" steps through the designs the player has (the free ones
+	# and any bought in the Shop); the rest are a tap away in the Shop, through a link on
+	# the group's caption line (a row of its own wouldn't fit when signed in).
+	var look := _group(right, "Card back", _shop_link())
 	var back := HBoxContainer.new()
 	back.add_theme_constant_override("separation", 8)
 	var preview := CardView.new(Vector2(22, 31))
 	preview.face_down = true
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	back.add_child(preview)
-	back.add_child(UiTheme.button("Next design", func() -> void: _change(func() -> void: Settings.card_back = (Settings.card_back + 1) % Settings.CARD_BACKS.size())))
-	_row(look, Settings.CARD_BACKS[Settings.card_back], back, 36.0)
+	back.add_child(UiTheme.button("Next design", func() -> void: _change(func() -> void: Settings.card_back = _next_back())))
+	_row(look, ShopSheet.back_name(Settings.card_back), back, 36.0)
 
 	var account := _group(right, "Account")
 	if not Online.signed_in():
@@ -89,10 +92,20 @@ func _build() -> void:
 		_row(account, "Cloud save: " + ("up to date" if not Online.dirty else "saving soon"), buttons, 30.0)
 
 
-func _group(parent: Control, caption: String) -> VBoxContainer:
+## A captioned group of rows. `action`, when given, sits at the right of the caption line,
+## like the links on iPhone section headers.
+func _group(parent: Control, caption: String, action: Control = null) -> VBoxContainer:
 	var cap := UiTheme.label(caption.to_upper(), 8, UiTheme.MUTED)
 	cap.add_theme_constant_override("shadow_offset_y", 0)
-	parent.add_child(cap)
+	if action == null:
+		parent.add_child(cap)
+	else:
+		var line := HBoxContainer.new()
+		cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cap.size_flags_vertical = Control.SIZE_SHRINK_END
+		line.add_child(cap)
+		line.add_child(action)
+		parent.add_child(line)
 	var card := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(1, 1, 1, 0.06)
@@ -173,3 +186,58 @@ func _change(apply: Callable, rebuild_after := true) -> void:
 func _open(sheet: Control) -> void:
 	Feel.play("click")
 	UiTheme.show_sheet(sheet)
+
+
+## The next card back the player may use, skipping the designs still locked in the Shop.
+func _next_back() -> int:
+	var count := ShopSheet.back_count()
+	for step: int in range(1, count + 1):
+		var index := (Settings.card_back + step) % count
+		if ShopCatalog.back_unlocked(index, Game.profile.wallet):
+			return index
+	return 0
+
+
+## "More in the Shop ›": a gold link for the Card back caption line.
+func _shop_link() -> Button:
+	var link := UiTheme.button("More in the Shop", _open_shop, 9)
+	link.name = "ShopLink"
+	link.custom_minimum_size = Vector2(0, 16)
+	link.size_flags_vertical = Control.SIZE_SHRINK_END
+	var room := StyleBoxEmpty.new()
+	room.content_margin_left = 6
+	room.content_margin_right = 13
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		link.add_theme_stylebox_override(state, room)
+	link.add_theme_color_override("font_color", UiTheme.GOLD)
+	link.add_theme_color_override("font_hover_color", UiTheme.GOLD.lightened(0.25))
+	link.add_theme_color_override("font_pressed_color", UiTheme.GOLD.darkened(0.15))
+	var chevron := UiIcon.new("forward", UiTheme.GOLD)
+	chevron.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	chevron.offset_left = -12
+	chevron.offset_right = -2
+	chevron.offset_top = -5
+	chevron.offset_bottom = 5
+	link.add_child(chevron)
+	return link
+
+
+## Like Sheet.rebuild, but the old rows leave the tree at once: waiting to be freed they
+## would still count toward the panel's size, and a change made while the sheet slides in
+## could leave the panel too tall.
+func rebuild() -> void:
+	for child: Node in body.get_children():
+		body.remove_child(child)
+		child.queue_free()
+	_build()
+	heading.text = title_text
+
+
+## The Shop, open on its card backs. Back here, this sheet rebuilds to show what changed
+## there (a design bought or put to use, which also re-bakes the preview card).
+func _open_shop() -> void:
+	var shop := ShopSheet.new("backs")
+	shop.closed.connect(func() -> void:
+		if is_inside_tree():
+			rebuild())
+	_open(shop)
