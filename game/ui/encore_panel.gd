@@ -2,13 +2,18 @@ class_name EncorePanel
 extends PanelContainer
 ## The Encore, offered in place of the run-over screen when a show is lost and the run
 ## may still play on (Game.encore_open()). It says how close the show was and what an
-## Encore gives, then the ways to pay: a rewarded ad and an Encore ticket when they can
-## be used, and diamonds and coins always, greyed out with the balance when they can't
-## be afforded, so the price is never a surprise. "No thanks" ends the run.
+## Encore gives, then the ways to take it: a rewarded ad when one may play, and coins,
+## always shown with the price and the player's balance (greyed out when they can't be
+## afforded), so the cost is never a surprise. In the guided first run the Encore is
+## free instead: one button, to teach the idea. Never diamonds or money: straight after
+## a loss is the worst moment to sell something (docs/MONETIZATION.md). "No thanks"
+## ends the run.
 ## There's no countdown and nothing flashing: the offer waits for as long as the player
 ## likes, and even survives closing the app, because the lost run stays saved until it
-## is decided. This panel only shows the offer; RunScreen does the paying (chose) and
-## the declining (declined).
+## is decided. Spending coins takes a second tap ("Tap again"), and a moment's pause
+## after that first tap, so a double tap can't spend them. This panel only shows the
+## offer; RunScreen does the paying (chose) and the declining (declined), and holds
+## taps while the panel appears (RunScreen.hold_taps).
 
 signal chose(paid_with: String)
 signal declined
@@ -16,8 +21,12 @@ signal declined
 const WIDTH := 404.0
 
 var run: RunState
-## Why the last try at paying didn't work, or "".
+## Why the last try at taking the Encore didn't work, or "".
 var note := ""
+## The coins were tapped once: the next tap on them pays.
+var _confirming := false
+## Holds the ways to take the Encore, rebuilt when the coins ask for their second tap.
+var _options: VBoxContainer
 
 
 func _init(lost_run: RunState, why_not := "") -> void:
@@ -54,15 +63,10 @@ func _ready() -> void:
 	heading.add_child(_centred(UiTheme.label("The crowd wants more.", 12, UiTheme.TEXT)))
 	col.add_child(heading)
 	col.add_child(_facts())
-	var at_no_cost := _free_options()
-	var has_free_way := at_no_cost.get_child_count() > 0
-	if has_free_way:
-		col.add_child(at_no_cost)
-	else:
-		at_no_cost.free()
-	var wallet := Game.profile.wallet
-	var affordable := wallet.can_afford("diamonds", Economy.ENCORE_DIAMONDS) or wallet.can_afford("coins", Economy.ENCORE_COINS)
-	col.add_child(_paid_options())
+	_options = VBoxContainer.new()
+	_options.add_theme_constant_override("separation", 1)
+	col.add_child(_options)
+	_build_options()
 	if note != "":
 		var why := _centred(UiTheme.label(note, 10, UiTheme.MULT.lightened(0.4)))
 		why.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -74,7 +78,9 @@ func _ready() -> void:
 	col.add_child(no)
 	if costs_rank(run):
 		col.add_child(_footnote("lock", "An Encore makes this run unranked."))
-	if not has_free_way and not affordable:
+	var free := Game.encore_free()
+	var ad := not free and Ads.can_offer("encore", ad_context(run))
+	if not free and not ad and not Game.wallet().can_afford("coins", Economy.ENCORE_COINS):
 		col.add_child(_footnote("", "Win shows to earn coins: %s buy an Encore." % UiTheme.number(Economy.ENCORE_COINS)))
 
 
@@ -115,43 +121,57 @@ func _tile(colour: Color, top: Control, caption: String) -> PanelContainer:
 	return tile
 
 
-## The ways that cost nothing now: a rewarded ad (only when AdPolicy allows one) and an
-## Encore ticket (only when the player holds one).
-func _free_options() -> HBoxContainer:
+## The ways to take the Encore. In the guided first run, one free button. Otherwise a
+## rewarded ad (only when AdPolicy allows one) beside the coins.
+func _build_options() -> void:
+	# Hidden at once (the coins button being replaced is still mid-press), freed later.
+	for child in _options.get_children():
+		(child as Control).hide()
+		child.queue_free()
+	if Game.encore_free():
+		var gift := UiIcon.new("gift", UiTheme.INK)
+		gift.custom_minimum_size = Vector2(14, 14)
+		_options.add_child(_wide(RunCoins.glyph_button(gift, "Take the Encore", chose.emit.bind("free"), 12, UiTheme.GOLD)))
+		_options.add_child(_centred(UiTheme.label("Free in your first run", 9, UiTheme.MUTED)))
+		return
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
+	_options.add_child(row)
 	if Ads.can_offer("encore", ad_context(run)):
 		var play := UiIcon.new("play", UiTheme.TEXT)
 		play.custom_minimum_size = Vector2(14, 14)
-		row.add_child(_wide(RunCoins.glyph_button(play, "Watch an ad", chose.emit.bind("ad"), 11, UiTheme.POINTS)))
-	var tickets := Game.profile.wallet.item_count("encore_ticket")
-	if tickets > 0:
-		var colour := UiTheme.GOLD.darkened(0.25)
-		var ticket := TicketGlyph.new(UiTheme.INK if colour.get_luminance() > 0.55 else UiTheme.TEXT)
-		row.add_child(_wide(RunCoins.glyph_button(ticket, "Use a ticket (%d left)" % tickets, chose.emit.bind("ticket"), 11, colour)))
-	return row
+		var watch := _wide(RunCoins.glyph_button(play, "Watch an ad", chose.emit.bind("ad"), 11, UiTheme.POINTS))
+		watch.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		row.add_child(watch)
+	row.add_child(_coins_option())
 
 
-## Diamonds and coins, side by side, each with the player's balance under it.
-func _paid_options() -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
-	row.add_child(_price("diamonds", Economy.ENCORE_DIAMONDS))
-	row.add_child(_price("coins", Economy.ENCORE_COINS))
-	return row
-
-
-func _price(currency: String, price: int) -> VBoxContainer:
-	var wallet := Game.profile.wallet
-	var can_pay := wallet.can_afford(currency, price)
+## The coins, with the player's balance under them. The first tap asks for a second.
+func _coins_option() -> VBoxContainer:
+	var wallet := Game.wallet()
+	var can_pay := wallet.can_afford("coins", Economy.ENCORE_COINS)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
-	var text := "%s %s" % [UiTheme.number(price), currency]
-	col.add_child(_wide(RunCoins.glyph_button(CurrencyIcon.new(currency, 14.0), text, chose.emit.bind(currency), 11, UiTheme.TONAL, can_pay)))
-	var has := UiTheme.label("You have %s" % UiTheme.number(wallet.balance(currency)), 9, UiTheme.MUTED if can_pay else UiTheme.MULT.lightened(0.4))
+	var price := UiTheme.number(Economy.ENCORE_COINS)
+	var text := "Tap again: %s coins" % price if _confirming else "%s coins" % price
+	var colour := UiTheme.GOLD.darkened(0.35) if _confirming else UiTheme.TONAL
+	col.add_child(_wide(RunCoins.glyph_button(CurrencyIcon.new("coins", 14.0), text, _on_coins, 11, colour, can_pay)))
+	var has := UiTheme.label("You have %s" % UiTheme.number(wallet.coins), 9, UiTheme.MUTED if can_pay else UiTheme.MULT.lightened(0.4))
 	col.add_child(_centred(has))
 	return col
+
+
+## Coins are spent on the second tap only. After the first, the panel waits a moment
+## before it takes taps again, so a quick double tap doesn't count as both.
+func _on_coins() -> void:
+	if not _confirming:
+		Feel.play("select")
+		_confirming = true
+		_build_options()
+		RunScreen.hold_taps(self)
+		return
+	chose.emit("coins")
 
 
 func _footnote(glyph: String, text: String) -> HBoxContainer:
@@ -176,32 +196,3 @@ func _wide(b: Button) -> Button:
 func _centred(l: Label) -> Label:
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	return l
-
-
-## A small ticket drawn like the line icons (UiIcon): notched sides and a perforation.
-class TicketGlyph extends Control:
-	var colour := Color.WHITE
-
-	func _init(tint: Color, side := 14.0) -> void:
-		colour = tint
-		custom_minimum_size = Vector2(side, side)
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	func _draw() -> void:
-		var s := minf(size.x, size.y)
-		var o := (size - Vector2(s, s)) / 2.0
-		var w := maxf(1.2, s * 0.09)
-		var outline := PackedVector2Array([o + Vector2(0.08, 0.26) * s, o + Vector2(0.92, 0.26) * s])
-		# The right side's notch, bowing inwards, then the left side's on the way back.
-		for i in 9:
-			var a := -PI / 2.0 - PI * i / 8.0
-			outline.append(o + (Vector2(0.92, 0.5) + Vector2(cos(a), sin(a)) * 0.11) * s)
-		outline.append(o + Vector2(0.92, 0.74) * s)
-		outline.append(o + Vector2(0.08, 0.74) * s)
-		for i in 9:
-			var a := PI / 2.0 - PI * i / 8.0
-			outline.append(o + (Vector2(0.08, 0.5) + Vector2(cos(a), sin(a)) * 0.11) * s)
-		outline.append(o + Vector2(0.08, 0.26) * s)
-		draw_polyline(outline, colour, w, true)
-		for y: float in [0.33, 0.47, 0.61]:
-			draw_line(o + Vector2(0.64, y) * s, o + Vector2(0.64, y + 0.07) * s, colour, w, true)
