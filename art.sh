@@ -14,6 +14,10 @@ mkdir -p game/art/jesters
 "$GODOT" --headless --script tools/jester_art.gd -- "$src" "$out" "$margin" 2>&1 | grep -E "webp|ERROR" || true
 "$GODOT" --headless --path game --import >/dev/null 2>&1 || true
 sed -i '' -e 's/^compress\/mode=0/compress\/mode=1/' -e 's/^mipmaps\/generate=false/mipmaps\/generate=true/' "$out.import"
+# The settings were edited in the same second as the first import, so Godot may not
+# notice: drop the imported copy so the next import really applies them (Zanni once
+# shipped lossless and without mipmaps, 498 KB instead of 96 KB, this way).
+rm -f "game/.godot/imported/$(basename "$out")-"*
 "$GODOT" --headless --path game --import >/dev/null 2>&1 || true
 ./check.sh
 echo "Added $out. See it with ./preview.sh, then ?screen=big (add the id there) or ?screen=jesters."

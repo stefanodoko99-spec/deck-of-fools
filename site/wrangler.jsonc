@@ -1,11 +1,16 @@
 {
-  // Serves the Godot web export. index.wasm is too big for Workers static assets,
-  // so the build gzips it to index.wasm.gz and worker.js serves it with Content-Encoding: gzip.
+  // Serves the Godot web export. worker.js sends the engine (index.wasm) and the game
+  // data (index.pck) pre-compressed by build.sh (Brotli or gzip).
   "name": "deck-of-fools",
   "main": "worker.js",
   "compatibility_date": "2026-09-01",
   "assets": {
     "directory": "../build/web",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // Serve index.html and index.offline.html at their own paths. The default
+    // ("auto-trailing-slash") answers them with a 307 redirect, and Godot's service
+    // worker then caches the redirect, so the installed web app (start_url
+    // ./index.html) and the offline page failed to open once the cache was complete.
+    "html_handling": "none"
   }
 }

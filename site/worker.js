@@ -21,6 +21,14 @@ export default {
     const url = new URL(req.url);
     const entry = COMPRESSED[url.pathname];
     if (!entry || (req.method !== "GET" && req.method !== "HEAD")) {
+      // Pages are served at their own paths (html_handling "none" in wrangler.jsonc,
+      // so no redirect ends up in the service worker's cache). "/" is the game, and a
+      // page asked for without ".html" (an old /privacy link) still finds its file.
+      if (url.pathname === "/" || (!url.pathname.includes(".") && url.pathname !== "/")) {
+        const page = url.pathname === "/" ? "/index.html" : url.pathname + ".html";
+        const found = await env.ASSETS.fetch(new Request(new URL(page, url), req));
+        if (found.status !== 404) return found;
+      }
       return env.ASSETS.fetch(req);
     }
     const [encoding, path] = pick(req.headers.get("Accept-Encoding") || "", entry.variants);
@@ -28,9 +36,10 @@ export default {
     const headers = new Headers({
       "Content-Type": entry.type,
       "Vary": "Accept-Encoding",
-      // An hour, then a cheap revalidation (ETag): the file names don't change
-      // between builds, and the engine and index.js must always match.
-      "Cache-Control": "public, max-age=3600",
+      // Always revalidate (a cheap 304 when unchanged, thanks to the ETag): the
+      // file names never change between builds, and an hour-old cached pck could
+      // meet a newer engine after a deploy. The service worker keeps the real cache.
+      "Cache-Control": "public, no-cache",
     });
     const etag = asset.headers.get("ETag");
     if (etag) headers.set("ETag", etag);
