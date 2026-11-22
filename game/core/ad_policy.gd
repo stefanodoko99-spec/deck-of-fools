@@ -1,41 +1,46 @@
 class_name AdPolicy
 extends RefCounted
 ## When an ad may appear. Pure rules over a snapshot of the player's state, so they
-## can be tested without a screen.
+## can be tested without a screen. The numbers follow the research in
+## docs/MONETIZATION.md: rewarded ads first, intermissions rare and late.
 ##
 ## Two kinds of placement:
-## - Rewarded ads the player chooses to watch for something (an Encore after losing a
-##   show, doubling a show's coins, doubling the daily gift). Never forced.
-## - Intermissions: a short ad break at a natural pause, between towns or after a
-##   run, never during a show, never at launch, never in the first runs, never for
-##   anyone who has paid, and never more often than the caps below.
-## The numbers are tuned in one place here; see docs/MONETIZATION.md for the reasons.
+## - Rewarded ads the player chooses to watch for something stated up front: an
+##   Encore after losing a show, doubling a finished run's coins, doubling the daily
+##   gift. Never forced, never in the ranked daily run's Encore.
+## - Intermissions: a short ad break at a natural pause (travelling on to a new town,
+##   leaving a finished run), never during a show, never at launch, never for new
+##   players, never for anyone who has paid, and rarely.
 
 const REWARDED := ["encore", "double_coins", "daily_gift"]
 const INTERMISSIONS := ["town_break", "run_end"]
 
-## Finished runs before the first intermission (new players see none).
-const NEW_PLAYER_RUNS := 3
+## New players see no intermissions until both are true.
+const NEW_PLAYER_RUNS := 5
+const NEW_PLAYER_DAYS := 14
 ## Seconds into a session before the first intermission.
-const SESSION_WARMUP := 180
+const SESSION_WARMUP := 300
 ## Seconds between two intermissions.
-const COOLDOWN := 300
-## Seconds after a rewarded ad (or a purchase) during which no intermission shows.
-const AFTER_REWARDED := 180
+const COOLDOWN := 600
+## Seconds after a rewarded ad or a purchase during which no intermission shows.
+const AFTER_REWARDED := 900
 ## Intermissions per session and per day.
-const MAX_PER_SESSION := 3
-const MAX_PER_DAY := 6
+const MAX_PER_SESSION := 2
+const MAX_PER_DAY := 4
 ## Rewarded ads per day, all placements together.
-const MAX_REWARDED_PER_DAY := 15
+const MAX_REWARDED_PER_DAY := 10
+## Town breaks only on the way into odd towns from the third (after towns 2, 4, 6).
+const TOWN_BREAK_FIRST := 3
 
 
 ## Returns "" when the placement may show now, or the reason it may not.
 ## `s` keys (all optional, with safe defaults):
 ##   mode: "off" | "test" | "live"; now: seconds; session_start: seconds;
-##   runs_finished; in_tutorial; payer; remove_ads; ranked_daily;
+##   runs_finished; install_days; in_tutorial; payer; remove_ads; ranked_daily;
+##   town (the town being entered, for town_break);
 ##   last_intermission, last_rewarded, last_purchase: seconds (or -1);
 ##   intermissions_session, intermissions_today, rewarded_today;
-##   encore_used (this run), double_used (this show).
+##   encore_used (this run), double_used (this run).
 static func check(placement: String, s: Dictionary) -> String:
 	if str(s.get("mode", "off")) == "off":
 		return "ads are off in this build"
@@ -59,8 +64,14 @@ static func check(placement: String, s: Dictionary) -> String:
 		return "not during the guided first run"
 	if bool(s.get("payer", false)) or bool(s.get("remove_ads", false)):
 		return "no intermissions for supporters"
-	if int(s.get("runs_finished", 0)) < NEW_PLAYER_RUNS:
+	if int(s.get("runs_finished", 0)) < NEW_PLAYER_RUNS or int(s.get("install_days", 0)) < NEW_PLAYER_DAYS:
 		return "new player"
+	if placement == "town_break":
+		if bool(s.get("ranked_daily", false)):
+			return "not in the ranked daily run"
+		var town := int(s.get("town", 0))
+		if town < TOWN_BREAK_FIRST or town % 2 == 0:
+			return "only every other town"
 	if now - float(s.get("session_start", now)) < SESSION_WARMUP:
 		return "too early in the session"
 	if _within(now, s.get("last_intermission", -1), COOLDOWN):

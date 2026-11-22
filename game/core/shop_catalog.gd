@@ -1,50 +1,52 @@
 class_name ShopCatalog
 extends RefCounted
 ## Everything the shop sells. ITEMS cost coins or diamonds and are handled entirely in
-## the game. PRODUCTS cost real money and go through the platform store (App Store on
-## iPhone, a web checkout in the browser); their ids are the store product ids to
-## create in App Store Connect when the store is connected (docs/MONETIZATION.md).
-## Nothing sold here is random, so there are no odds to disclose, and nothing gives an
-## advantage in ranked play.
+## the game; PRODUCTS cost real money and go through the platform store (App Store on
+## iPhone, a web checkout in the browser). Their ids are the store product ids to
+## create in App Store Connect (docs/MONETIZATION.md).
+##
+## Rules this catalog keeps (see the research in docs/MONETIZATION.md):
+## - nothing is random, so there are no odds to disclose;
+## - nothing sold touches a run: diamonds buy cosmetics only;
+## - coins are never sold or exchanged for diamonds;
+## - diamond prices are multiples of 100, and 100 diamonds cost $0.99 at the base
+##   rate, so every price can show its real-money value and packs leave no odd
+##   leftovers.
+
+## 100 diamonds = this many US dollars at the base rate (the smallest pack, no bonus).
+const USD_PER_100_DIAMONDS := 0.99
 
 ## Card backs 0-5 are free for everyone; these are drawn by CardView._draw_back.
 const ITEMS := [
-	{ "id": "back_gilded_sun", "kind": "card_back", "back": 6, "name": "Gilded sun", "currency": "coins", "price": 500,
+	{ "id": "back_gilded_sun", "kind": "card_back", "back": 6, "name": "Gilded sun", "currency": "coins", "price": 600,
 		"text": "A golden sunburst on midnight blue." },
 	{ "id": "back_venetian_glass", "kind": "card_back", "back": 7, "name": "Venetian glass", "currency": "coins", "price": 900,
 		"text": "Murano glass in teal and gold." },
-	{ "id": "back_opera_night", "kind": "card_back", "back": 8, "name": "Opera night", "currency": "diamonds", "price": 150,
+	{ "id": "back_opera_night", "kind": "card_back", "back": 8, "name": "Opera night", "currency": "diamonds", "price": 300,
 		"text": "Velvet seats under a chandelier." },
-	{ "id": "back_carnival_gold", "kind": "card_back", "back": 9, "name": "Carnival gold", "currency": "diamonds", "price": 250,
+	{ "id": "back_carnival_gold", "kind": "card_back", "back": 9, "name": "Carnival gold", "currency": "diamonds", "price": 300,
 		"text": "Gold leaf, confetti and a jester's crown." },
-	{ "id": "encore_ticket", "kind": "item", "name": "Encore ticket", "currency": "diamonds", "price": 25, "count": 1,
-		"text": "After losing a show, play on with one more hand and discard. One Encore per run; the run is then unranked." },
-	{ "id": "encore_tickets_3", "kind": "item", "item": "encore_ticket", "name": "3 Encore tickets", "currency": "diamonds", "price": 60, "count": 3,
-		"text": "Three Encores for later runs." },
-	{ "id": "coins_600", "kind": "coins", "name": "Purse of coins", "currency": "diamonds", "price": 50, "amount": 600,
-		"text": "600 coins." },
-	{ "id": "coins_2000", "kind": "coins", "name": "Chest of coins", "currency": "diamonds", "price": 140, "amount": 2000,
-		"text": "2,000 coins." },
 ]
 
 ## Real-money products. "usd" is only a reference price for the test store; the live
-## store shows the platform's localized price.
+## store shows the platform's own localized price. Pack ids carry the base amount so
+## the bonus can change without new products.
 const PRODUCTS := [
-	{ "id": "dof.starter", "kind": "bundle", "name": "Starter pack", "usd": 2.99, "once": true,
-		"diamonds": 300, "coins": 1000, "grant": ["back_starter_crest"], "items": { "encore_ticket": 1 },
-		"text": "300 diamonds, 1,000 coins, an Encore ticket and the Starter's crest card back. Once per player." },
+	{ "id": "dof.starter", "kind": "bundle", "name": "Opening night pack", "usd": 1.99, "once": true,
+		"diamonds": 300, "grant": ["back_starter_crest"],
+		"text": "300 diamonds and the Starter's crest card back, sold only here. Once per player." },
 	{ "id": "dof.remove_ads", "kind": "unlock", "name": "No intermissions", "usd": 3.99, "once": true, "grant": ["remove_ads"],
-		"text": "No more ad breaks between towns. Optional rewards (double coins, Encore) stay available." },
+		"text": "No ad breaks, ever. Rewards you'd watch an ad for (an Encore, double coins, double gift) are yours with one tap." },
 	{ "id": "dof.diamonds.100", "kind": "diamonds", "name": "Handful of diamonds", "usd": 0.99, "diamonds": 100,
 		"text": "100 diamonds." },
-	{ "id": "dof.diamonds.550", "kind": "diamonds", "name": "Pouch of diamonds", "usd": 4.99, "diamonds": 550,
+	{ "id": "dof.diamonds.500", "kind": "diamonds", "name": "Pouch of diamonds", "usd": 4.99, "diamonds": 550,
 		"text": "500 diamonds + 50 bonus." },
-	{ "id": "dof.diamonds.1200", "kind": "diamonds", "name": "Box of diamonds", "usd": 9.99, "diamonds": 1200,
-		"text": "1,000 diamonds + 200 bonus." },
-	{ "id": "dof.diamonds.2500", "kind": "diamonds", "name": "Casket of diamonds", "usd": 19.99, "diamonds": 2500,
-		"text": "2,000 diamonds + 500 bonus." },
-	{ "id": "dof.diamonds.6500", "kind": "diamonds", "name": "Treasury of diamonds", "usd": 49.99, "diamonds": 6500,
-		"text": "5,000 diamonds + 1,500 bonus." },
+	{ "id": "dof.diamonds.1000", "kind": "diamonds", "name": "Box of diamonds", "usd": 9.99, "diamonds": 1150,
+		"text": "1,000 diamonds + 150 bonus." },
+	{ "id": "dof.diamonds.2000", "kind": "diamonds", "name": "Casket of diamonds", "usd": 19.99, "diamonds": 2400,
+		"text": "2,000 diamonds + 400 bonus." },
+	{ "id": "dof.diamonds.5000", "kind": "diamonds", "name": "Treasury of diamonds", "usd": 49.99, "diamonds": 6250,
+		"text": "5,000 diamonds + 1,250 bonus." },
 ]
 
 ## Card backs that are never sold on their own (they come in a bundle).
@@ -65,6 +67,11 @@ static func product(id: String) -> Dictionary:
 		if entry["id"] == id:
 			return entry
 	return {}
+
+
+## What `diamonds` are worth in real money at the base rate, e.g. "about $2.97".
+static func money_value(diamonds: int) -> String:
+	return "about $%.2f" % (diamonds / 100.0 * USD_PER_100_DIAMONDS)
 
 
 ## The wallet id that owns card back `index`, or "" when the back is free.
@@ -107,8 +114,6 @@ static func buy(id: String, wallet: Wallet) -> String:
 			wallet.grant(id)
 		"item":
 			wallet.add_item(str(entry.get("item", id)), int(entry.get("count", 1)))
-		"coins":
-			wallet.earn("coins", int(entry["amount"]))
 	return ""
 
 
@@ -120,12 +125,8 @@ static func deliver(product_id: String, wallet: Wallet) -> String:
 	if bool(p.get("once", false)) and wallet.owns(product_id):
 		return "Already bought."
 	wallet.earn("diamonds", int(p.get("diamonds", 0)))
-	wallet.earn("coins", int(p.get("coins", 0)))
 	for id: Variant in p.get("grant", []):
 		wallet.grant(str(id))
-	var extra: Dictionary = p.get("items", {})
-	for id: Variant in extra:
-		wallet.add_item(str(id), int(extra[id]))
 	if bool(p.get("once", false)):
 		wallet.grant(product_id)
 	return ""

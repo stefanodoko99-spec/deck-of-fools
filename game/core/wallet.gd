@@ -32,6 +32,12 @@ var gift_day := ""
 var gift_streak := 0
 ## The last day the daily run paid its coins (once a day).
 var daily_run_day := ""
+## Coins from shows today (for the daily soft cap) and the day of the first-win bonus.
+var coin_day := ""
+var show_coins_today := 0
+var first_win_day := ""
+## The day the daily gift was last doubled (once a day).
+var gift_doubled_day := ""
 ## Ad counters for today (reset when the day changes), to keep ads rare.
 var ad_day := ""
 var rewarded_today := 0
@@ -110,6 +116,13 @@ func log_purchase(product_id: String, provider: String, test: bool, transaction 
 		purchases.pop_front()
 
 
+## Start a new day's show-coin count if the date changed.
+func roll_coin_day(today: String) -> void:
+	if coin_day != today:
+		coin_day = today
+		show_coins_today = 0
+
+
 ## Start a new day's ad counters if the date changed.
 func roll_ad_day(today: String) -> void:
 	if ad_day != today:
@@ -124,6 +137,7 @@ func to_dict() -> Dictionary:
 		"coins_earned": coins_earned, "coins_spent": coins_spent,
 		"diamonds_earned": diamonds_earned, "diamonds_spent": diamonds_spent,
 		"purchases": purchases.duplicate(true), "gift_day": gift_day, "gift_streak": gift_streak, "daily_run_day": daily_run_day,
+		"coin_day": coin_day, "show_coins_today": show_coins_today, "first_win_day": first_win_day, "gift_doubled_day": gift_doubled_day,
 		"ad_day": ad_day, "rewarded_today": rewarded_today, "intermissions_today": intermissions_today,
 	}
 
@@ -164,6 +178,10 @@ static func from_dict(d: Dictionary) -> Wallet:
 	w.gift_day = str(d.get("gift_day", ""))
 	w.gift_streak = maxi(0, int(d.get("gift_streak", 0)))
 	w.daily_run_day = str(d.get("daily_run_day", ""))
+	w.coin_day = str(d.get("coin_day", ""))
+	w.show_coins_today = maxi(0, int(d.get("show_coins_today", 0)))
+	w.first_win_day = str(d.get("first_win_day", ""))
+	w.gift_doubled_day = str(d.get("gift_doubled_day", ""))
 	w.ad_day = str(d.get("ad_day", ""))
 	w.rewarded_today = maxi(0, int(d.get("rewarded_today", 0)))
 	w.intermissions_today = maxi(0, int(d.get("intermissions_today", 0)))

@@ -766,7 +766,9 @@ func _encore() -> Dictionary:
 	hands_left += Economy.ENCORE_HANDS
 	discards_left += Economy.ENCORE_DISCARDS
 	_count("encores")
-	_draw_to_full()
+	# A later draw, not a first deal: deal-time effects (face-down first deals and the
+	# like) must not fire again.
+	_draw_to_full(true)
 	return _ok({})
 
 

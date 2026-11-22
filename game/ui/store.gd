@@ -37,7 +37,7 @@ func purchase(product_id: String) -> String:
 		return "Unknown product."
 	if mode == "off":
 		return "The store opens soon."
-	var wallet: Wallet = Game.profile.wallet
+	var wallet: Wallet = Game.wallet()
 	if bool(p.get("once", false)) and wallet.owns(product_id):
 		return "Already bought."
 	var transaction := ""

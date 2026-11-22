@@ -23,8 +23,13 @@ var jester_wins: Dictionary = {}
 
 ## Every finished run, any mode (new players see no intermissions for a while).
 var runs_played := 0
-## Coins, diamonds and what they bought (core/wallet.gd).
+## Coins, diamonds and what they bought (core/wallet.gd). Builds in the "test" money
+## mode use test_wallet instead, so free test purchases never reach the real wallet
+## (Game.wallet() picks the right one).
 var wallet := Wallet.new()
+var test_wallet := Wallet.new()
+## The first day this profile played (UTC, YYYY-MM-DD): new players see no ad breaks.
+var first_played := ""
 
 
 
@@ -105,7 +110,8 @@ func to_dict() -> Dictionary:
 		"total_wins": total_wins, "runs_lost": runs_lost, "signs_used": signs_used,
 		"challenges_won": challenges_won.keys(), "badges": badges.duplicate(),
 		"jester_runs": jester_runs.duplicate(), "jester_wins": jester_wins.duplicate(),
-		"runs_played": runs_played, "wallet": wallet.to_dict(),
+		"runs_played": runs_played, "wallet": wallet.to_dict(), "test_wallet": test_wallet.to_dict(),
+		"first_played": first_played,
 	}
 
 
@@ -133,4 +139,26 @@ static func from_dict(d: Dictionary) -> Profile:
 	var w: Variant = d.get("wallet")
 	if w is Dictionary:
 		p.wallet = Wallet.from_dict(w)
+	var tw: Variant = d.get("test_wallet")
+	if tw is Dictionary:
+		p.test_wallet = Wallet.from_dict(tw)
+	p.first_played = str(d.get("first_played", ""))
 	return p
+
+
+## Jesters found so far (for the collection's album milestones).
+func jesters_found() -> int:
+	var found := 0
+	for d: ContentDef in ContentDB.pool("zanni"):
+		if discovered.has(d.id):
+			found += 1
+	return found
+
+
+## Whole days since the first day played (0 on the first day).
+func days_played_since(today: String) -> int:
+	if first_played == "":
+		return 0
+	var a := Time.get_unix_time_from_datetime_string(first_played + "T12:00:00")
+	var b := Time.get_unix_time_from_datetime_string(today + "T12:00:00")
+	return maxi(0, roundi((b - a) / 86400.0))
