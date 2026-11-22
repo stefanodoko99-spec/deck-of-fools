@@ -50,6 +50,18 @@ const INK := Color("2a2433")
 const EDGE := Color("3a2e2a")
 const PAPER_LINE := Color("c9b48c")
 
+## Backs from here on are sold in the shop (ShopCatalog) and drawn richer than the free
+## ones: a metal foil frame and a foil emblem.
+const FIRST_PREMIUM_BACK := 6
+## Metal foils for the premium backs, from highlight to deep shadow.
+const FOIL_GOLD := [Color("fff6d8"), Color("f4c95d"), Color("c48a26"), Color("6e420c")]
+const FOIL_SILVER := [Color("ffffff"), Color("dbe3ef"), Color("97a5bb"), Color("44506a")]
+## Where the foil tones fall across a card (0-1, top left to bottom right): two bright
+## streaks, the way light catches a sheet of metal leaf.
+const FOIL_STOPS := [[0.0, 1], [0.18, 0], [0.4, 1], [0.6, 2], [0.8, 0], [1.0, 1]]
+## The light falls from the top left, so facets facing that way are the bright ones.
+const LIGHT_ANGLE := -0.75 * PI
+
 const PIPS := {
 	2: [[1, 0.0], [1, 1.0]],
 	3: [[1, 0.0], [1, 0.5], [1, 1.0]],
@@ -79,6 +91,8 @@ signal swiped(view: CardView, direction: int)
 
 const HOLD_SECONDS := 0.42
 const FOILS := { "ed_silvered": 1, "ed_opaline": 2, "ed_prismatic": 3, "ed_shadow": 4 }
+## The card shader's foil for a face-down premium back: a slow glint across its metal.
+const BACK_GLINT := 5
 
 var kind := "card"
 var card: PlayingCard
@@ -148,7 +162,7 @@ func _ready() -> void:
 		_material = ShaderMaterial.new()
 		_material.shader = preload("res://shaders/card.gdshader")
 		_material.set_shader_parameter("card_size", size)
-		_material.set_shader_parameter("foil", 0 if face_down else FOILS.get(edition, 0))
+		_material.set_shader_parameter("foil", _foil_mode())
 		_face.material = _material
 	if showcase:
 		_mesh = CardMesh.new(size)
@@ -162,6 +176,14 @@ func _ready() -> void:
 	set_art(CardArt.request(self))
 	set_process(_material != null or sway >= 0 or showcase)
 
+
+
+## The shader foil for this card: its edition's, or for a face-down card the glint of a
+## premium back. The glint never stops moving, so reduced motion leaves it out.
+func _foil_mode() -> int:
+	if face_down:
+		return BACK_GLINT if _back_index() >= FIRST_PREMIUM_BACK and not Settings.reduce_motion else 0
+	return int(FOILS.get(edition, 0))
 
 
 func set_art(texture: Texture2D) -> void:
@@ -397,14 +419,26 @@ static func suit_colour(suit: int) -> Color:
 	return SUIT_COLOURS[clampi(suit, 0, 3)]
 
 
+## The card back to draw. An explicit back_style shows exactly that back, which is how
+## the shop previews a back for sale and the gallery shows them all. Otherwise it is the
+## player's choice, but only while they own it: after a refund, or with a cloud save
+## from before the purchase, their cards fall back to the Harlequin rather than wear a
+## back they don't have. baked_copy() hands the bake this resolved number, so the
+## picture always matches art_key().
 func _back_index() -> int:
-	return back_style if back_style >= 0 else Settings.card_back
+	if back_style >= 0:
+		return back_style if back_style < Settings.CARD_BACKS.size() else 0
+	return Settings.shown_back(Game.profile.wallet)
 
 
 func _draw_back(r: Rect2) -> void:
+	var index := _back_index()
+	if index >= FIRST_PREMIUM_BACK:
+		_draw_premium_back(r, index)
+		return
 	var body := _round_rect(r, 5.0)
 	var inner := r.grow(-maxf(3.0, r.size.x * 0.08))
-	match _back_index():
+	match index:
 		1:
 			_back_sun_and_moon(r, body, inner)
 		2:
@@ -602,6 +636,821 @@ func _back_filigree(r: Rect2, body: PackedVector2Array, inner: Rect2) -> void:
 	_dot(c + Vector2(-s * 0.08, -s * 0.08), s * 0.1, Color(1, 1, 1, 0.4))
 	for dir in [-1.0, 1.0]:
 		_poly(_diamond(c + Vector2(0, dir * r.size.y * 0.3), s * 0.25, s * 0.45), gold)
+
+
+## The premium backs sold in the shop: a metal foil frame (gold, or silver for the
+## Starter's crest) where the free backs have a white line, deeper colour and a foil
+## emblem. Each is drawn for the size it is baked at: the 20 px deck pile keeps only
+## the big shapes, hand-sized cards add fine lines and the big inspect card adds the
+## small jewellery.
+func _draw_premium_back(r: Rect2, index: int) -> void:
+	var k := r.size.x / 60.0
+	# Corners as round as a playing card's face, so a big back matches the cards around it.
+	var radius := maxf(5.0, 6.0 * k)
+	var band := maxf(1.7, 3.2 * k)
+	var inner := r.grow(-band)
+	var inner_radius := maxf(1.2, radius - band * 0.75)
+	var panel := _rounded_ring(inner, inner_radius)
+	match index:
+		6:
+			_back_gilded_sun(r, panel, inner, k)
+		7:
+			_back_venetian_glass(r, panel, inner, k)
+		8:
+			_back_opera_night(r, panel, inner, k)
+		9:
+			_back_carnival_gold(r, panel, inner, k)
+		_:
+			_back_starters_crest(r, panel, inner, k)
+	_foil_frame(r, radius, inner, inner_radius, FOIL_SILVER if index == 10 else FOIL_GOLD, k)
+	_gloss(r)
+
+
+## The premium frame: a band of metal foil whose streaks run across the card, a dark rim
+## so it keeps its edge on any table and, on bigger cards, an engraved rule and a small
+## jewel in each corner.
+func _foil_frame(r: Rect2, radius: float, inner: Rect2, inner_radius: float, tones: Array, k: float) -> void:
+	var outer_ring := _rounded_ring(r, radius)
+	var inner_ring := _rounded_ring(inner, inner_radius)
+	_band(outer_ring, inner_ring, func(p: Vector2) -> Color: return _metal_at(p, r, tones))
+	var deep: Color = tones[3]
+	draw_polyline(Paint.closed(inner_ring), Color(deep, 0.85), maxf(0.45, 0.5 * k), true)
+	draw_polyline(Paint.closed(outer_ring), Color(deep.darkened(0.3), 0.9), maxf(0.5, 0.55 * k), true)
+	if r.size.x < 40.0:
+		return
+	var gap := (r.size.x - inner.size.x) / 2.0
+	var rule := _rounded_ring(r.grow(-gap * 0.5), (radius + inner_radius) * 0.5)
+	draw_polyline(Paint.closed(rule), Color(deep, 0.4), maxf(0.35, 0.32 * k), true)
+	for corner: Vector2 in [inner.position, Vector2(inner.end.x, inner.position.y), inner.end, Vector2(inner.position.x, inner.end.y)]:
+		var gem := _diamond(corner + (inner.get_center() - corner).sign() * inner_radius * 0.55, 1.5 * k, 1.5 * k)
+		_foil(gem, tones, r)
+		draw_polyline(Paint.closed(gem), Color(deep, 0.8), maxf(0.35, 0.3 * k), true)
+
+
+## 6 Gilded sun: a faceted golden sunburst on midnight blue, ringed with gold beads,
+## under a sky of small gold stars.
+func _back_gilded_sun(r: Rect2, panel: PackedVector2Array, inner: Rect2, k: float) -> void:
+	var w := r.size.x
+	var c := inner.get_center()
+	_gradient(panel, Color("26399a"), Color("0a1036"))
+	_rays(c, 32, r.size.length(), Color(1, 1, 1, 0.045), panel)
+	_glow_in(c, w * 0.7, Color("ffb938", 0.55), panel)
+	var star: Color = FOIL_GOLD[0]
+	for i in 34:
+		var at := _scatter(inner.grow(-1.5 * k), i + 5)
+		if at.distance_to(c) > w * 0.47:
+			_dot(at, w * (0.006 + 0.004 * (i % 3)), Color(star, 0.35 + 0.2 * (i % 3)))
+	if w >= 40.0:
+		for spot: Vector2 in [Vector2(0.15, 0.09), Vector2(0.85, 0.09), Vector2(0.15, 0.91), Vector2(0.85, 0.91)]:
+			_sparkle(inner.position + inner.size * spot, w * 0.05, Color(star, 0.95))
+		# An oval of small gold beads round the sun, following the card's shape.
+		for i in 44:
+			var a := i * TAU / 44.0
+			_dot(c + Vector2(cos(a) * w * 0.405, sin(a) * w * 0.54), w * (0.009 if i % 2 == 0 else 0.006), FOIL_GOLD[1])
+	# Sixteen rays, long and short, each split into a lit and a shaded facet.
+	for i in 16:
+		var a := -PI / 2.0 + i * TAU / 16.0
+		var long_ray := i % 2 == 0
+		var tip := c + Vector2.from_angle(a) * w * (0.38 if long_ray else 0.29)
+		var half := 0.22 if long_ray else 0.17
+		var foot := w * 0.15
+		var mid := c + Vector2.from_angle(a) * foot * 0.96
+		draw_colored_polygon(PackedVector2Array([c + Vector2.from_angle(a - half) * foot, tip, mid]), _facet(a - PI / 2.0, FOIL_GOLD))
+		draw_colored_polygon(PackedVector2Array([mid, tip, c + Vector2.from_angle(a + half) * foot]), _facet(a + PI / 2.0, FOIL_GOLD))
+	_foil_disc(c, w * 0.18, FOIL_GOLD, k)
+
+
+## 7 Venetian glass: a leaded window of Murano glass diamonds in teal and aqua around a
+## gold-rimmed millefiori medallion, every pane catching the light like glass.
+func _back_venetian_glass(r: Rect2, panel: PackedVector2Array, inner: Rect2, k: float) -> void:
+	var w := r.size.x
+	var c := inner.get_center()
+	_gradient(panel, Color("108c88"), Color("04313c"))
+	var tints := [Color("2fd3c0"), Color("0f8f8a"), Color("6be8d8"), Color("0a6470"), Color("1aa79b"), Color("3fb8d8")]
+	var cell := inner.size.x / 4.0
+	var half_h := cell * 0.7
+	for row in range(-1, ceili(inner.size.y / half_h) + 2):
+		for col in range(-1, 6):
+			var at := Vector2(inner.position.x + col * cell + (cell / 2.0 if posmod(row, 2) == 1 else 0.0), inner.position.y + row * half_h)
+			var tint: Color = tints[mini(floori(_noise(row * 17 + col + 40, 7) * tints.size()), tints.size() - 1)]
+			var pane := _diamond(at, cell / 2.0, half_h)
+			for piece in Geometry2D.intersect_polygons(pane, panel):
+				_gradient(piece, Color(tint.lightened(0.2), 0.82), Color(tint.darkened(0.3), 0.82))
+			if w >= 40.0:
+				# Light catching the upper-left edge of each pane.
+				var glint := PackedVector2Array([pane[0], pane[3], pane[3].lerp(at, 0.3), pane[0].lerp(at, 0.3)])
+				for piece in Geometry2D.intersect_polygons(glint, panel):
+					draw_colored_polygon(piece, Color(1, 1, 1, 0.16))
+	var width := maxf(0.5, 0.75 * k)
+	for seg in _lattice(inner, panel, cell, half_h):
+		draw_polyline(seg, Color(FOIL_GOLD[3] as Color, 0.8), width * 1.7, true)
+		draw_polyline(seg, FOIL_GOLD[1], width, true)
+		if k > 0.6:
+			draw_polyline(seg, Color(FOIL_GOLD[0] as Color, 0.7), width * 0.35, true)
+	var radius := w * 0.28
+	_glow_in(c, w * 0.62, Color("b4fff4", 0.35), panel)
+	_dot(c + Vector2(0, radius * 0.1), radius * 1.05, Color(0.0, 0.08, 0.1, 0.35))
+	_murano_bead(c, radius, k)
+	for dir: float in [-1.0, 1.0]:
+		_murano_bead(c + Vector2(0, dir * inner.size.y * 0.37), w * 0.075, k)
+
+
+## A round Murano bead set in gold: deep teal glass lit from the top left, a millefiori
+## flower of white star canes and gold petals, and a bright glassy highlight.
+func _murano_bead(c: Vector2, radius: float, k: float) -> void:
+	_foil_disc(c, radius, FOIL_GOLD, k)
+	var glass := radius * (0.8 if radius > 8.0 else 0.72)
+	var focus := c + Vector2(-0.3, -0.38) * glass
+	var light := Color("8ff7ea")
+	var deep := Color("05414d")
+	_fan(focus, _circle(c, glass, 40), func(p: Vector2) -> Color: return light.lerp(deep, clampf(p.distance_to(focus) / (glass * 1.45), 0.0, 1.0)))
+	if glass > 12.0:
+		# Aventurine: flecks of gold leaf caught in the glass.
+		for i in 16:
+			_dot(c + Vector2.from_angle(_noise(i, 3) * TAU) * glass * (0.25 + 0.65 * _noise(i, 4)), glass * 0.018, Color(FOIL_GOLD[0] as Color, 0.85))
+	if glass > 6.0:
+		var canes := 10 if glass > 12.0 else 8
+		for i in canes:
+			var at := c + Vector2.from_angle(-PI / 2.0 + i * TAU / canes) * glass * 0.66
+			_dot(at, glass * 0.15, Color("f4fffd"))
+			_dot(at, glass * 0.095, Color("2fd3c0") if i % 2 == 0 else Color("3f8ed8"))
+			_dot(at, glass * 0.04, FOIL_GOLD[0])
+		for i in 6:
+			_leaf(c, c + Vector2.from_angle(-PI / 2.0 + i * TAU / 6.0) * glass * 0.46, glass * 0.22, FOIL_GOLD[1])
+	_dot(c, glass * 0.17, Color("ff6b5a"))
+	_dot(c, glass * 0.08, FOIL_GOLD[0])
+	# Glass: a curved highlight top left and a faint rim of light bottom right.
+	draw_arc(c, glass * 0.82, PI * 1.08, PI * 1.42, 16, Color(1, 1, 1, 0.55), glass * 0.1, true)
+	_dot(c + Vector2.from_angle(PI * 1.25) * glass * 0.56, glass * 0.06, Color(1, 1, 1, 0.75))
+	draw_arc(c, glass * 0.9, PI * 0.1, PI * 0.42, 12, Color(1, 1, 1, 0.28), glass * 0.05, true)
+
+
+## 8 Opera night: tiers of boxes curving round an opera house under a glowing gold
+## chandelier, rows of red velvet seats below; deep red and gold.
+func _back_opera_night(r: Rect2, panel: PackedVector2Array, inner: Rect2, k: float) -> void:
+	var w := r.size.x
+	_gradient(panel, Color("7d1029"), Color("2a0410"))
+	var lamp := Vector2(inner.get_center().x, inner.position.y + inner.size.y * 0.2)
+	_glow_in(lamp, w * 0.85, Color("ffb54a", 0.5), panel)
+	for tier in 3:
+		_opera_tier(inner, panel, tier, k)
+	_opera_seats(inner, panel)
+	_chandelier(lamp, inner.position.y, w, k)
+
+
+## One tier of boxes: a dark row of lit arched doorways above a velvet balcony front with
+## a gold rail, curving round like a horseshoe.
+func _opera_tier(inner: Rect2, panel: PackedVector2Array, tier: int, k: float) -> void:
+	var w := inner.size.x
+	var cx := inner.get_center().x
+	var top := inner.position.y + inner.size.y * (0.36 + 0.15 * tier)
+	var sag := inner.size.y * 0.1
+	var box_h := inner.size.y * 0.085
+	var front_h := inner.size.y * 0.04
+	var curve := func(x: float, dy: float) -> Vector2:
+		var u := (x - cx) / (w * 0.62)
+		return Vector2(x, top + sag * (1.0 - u * u) + dy)
+	var xs := PackedFloat32Array()
+	for i in 25:
+		xs.append(lerpf(inner.position.x - 1.0, inner.end.x + 1.0, i / 24.0))
+	var boxes := PackedVector2Array()
+	var rail := PackedVector2Array()
+	var trim := PackedVector2Array()
+	for x in xs:
+		boxes.append(curve.call(x, -box_h))
+		rail.append(curve.call(x, 0.0))
+		trim.append(curve.call(x, front_h))
+	var front := rail.duplicate()
+	for i in range(xs.size() - 1, -1, -1):
+		boxes.append(curve.call(xs[i], 0.0))
+		front.append(curve.call(xs[i], front_h))
+	for piece in Geometry2D.intersect_polygons(boxes, panel):
+		_gradient(piece, Color("1c0309"), Color("3d0814"))
+	if w >= 34.0:
+		var doors := 7
+		for j in doors:
+			var x := lerpf(inner.position.x, inner.end.x, (j + 0.5) / doors)
+			var foot: Vector2 = curve.call(x, -box_h * 0.12)
+			var door := Paint.arch(Rect2(foot - Vector2(w * 0.035, box_h * 0.72), Vector2(w * 0.07, box_h * 0.72)), 0.6, 5)
+			for piece in Geometry2D.intersect_polygons(door, panel):
+				_gradient(piece, Color("ffe3a0"), Color("e0802f"))
+	else:
+		for seg in Geometry2D.intersect_polyline_with_polygon(boxes.slice(0, xs.size()), panel):
+			draw_polyline(seg, Color("ffcf7a", 0.6), maxf(0.4, box_h * 0.3), true)
+	for piece in Geometry2D.intersect_polygons(front, panel):
+		_gradient(piece, Color("d8314f"), Color("8a1029"))
+	for seg in Geometry2D.intersect_polyline_with_polygon(rail, panel):
+		draw_polyline(seg, FOIL_GOLD[1], maxf(0.5, 0.85 * k), true)
+		if k > 0.6:
+			draw_polyline(seg, Color(FOIL_GOLD[0] as Color, 0.8), 0.3 * k, true)
+	for seg in Geometry2D.intersect_polyline_with_polygon(trim, panel):
+		draw_polyline(seg, Color(FOIL_GOLD[2] as Color, 0.9), maxf(0.35, 0.45 * k), true)
+
+
+## Rows of red velvet seats at the foot of the card, the nearest row the biggest.
+func _opera_seats(inner: Rect2, panel: PackedVector2Array) -> void:
+	var w := inner.size.x
+	var cx := inner.get_center().x
+	for row in 3:
+		var seat_w := w * (0.1 + 0.02 * row)
+		var seat_h := inner.size.y * (0.055 + 0.012 * row)
+		var y := inner.position.y + inner.size.y * (0.84 + 0.075 * row)
+		for i in ceili(w / seat_w) + 2:
+			var x := inner.position.x + (i - 0.5 + (0.5 if row % 2 == 1 else 0.0)) * seat_w
+			var u := (x - cx) / w
+			var seat := Rect2(Vector2(x - seat_w * 0.43, y - u * u * inner.size.y * 0.08), Vector2(seat_w * 0.86, seat_h))
+			# A seat back: rounded on top, square where it meets the seat.
+			var shape := _ellipse_arc(seat.position + Vector2(seat.size.x / 2.0, seat_w * 0.3), Vector2(seat.size.x / 2.0, seat_w * 0.3), PI, TAU, 8)
+			shape.append(seat.end)
+			shape.append(Vector2(seat.position.x, seat.end.y))
+			for piece in Geometry2D.intersect_polygons(shape, panel):
+				_gradient(piece, Color("ea4862"), Color("7a0c22"))
+			# The velvet's sheen along the top.
+			var sheen := _ellipse_arc(seat.position + Vector2(seat.size.x / 2.0, seat_w * 0.34), Vector2(seat.size.x * 0.36, seat_w * 0.22), PI * 1.15, PI * 1.85, 6)
+			for seg in Geometry2D.intersect_polyline_with_polygon(sheen, panel):
+				draw_polyline(seg, Color(1, 0.8, 0.85, 0.35), maxf(0.3, seat_w * 0.07), true)
+
+
+## A gilded chandelier hanging from the top of the card: a slim gold stem, two rings of
+## arms holding candle flames and a crystal drop.
+func _chandelier(at: Vector2, ceiling: float, w: float, k: float) -> void:
+	var s := w * 0.065
+	var line := maxf(0.5, 0.7 * k)
+	draw_line(Vector2(at.x, ceiling), at + Vector2(0, -s * 2.0), Color(FOIL_GOLD[1] as Color, 0.85), line * 0.8, true)
+	var stem := PackedVector2Array()
+	for p: Vector2 in [Vector2(0, -2.2), Vector2(0.32, -1.8), Vector2(0.18, -1.1), Vector2(0.5, -0.3), Vector2(0.3, 0.6), Vector2(0.12, 1.15)]:
+		stem.append(at + p * s)
+	for p: Vector2 in [Vector2(-0.12, 1.15), Vector2(-0.3, 0.6), Vector2(-0.5, -0.3), Vector2(-0.18, -1.1), Vector2(-0.32, -1.8)]:
+		stem.append(at + p * s)
+	_foil(stem, FOIL_GOLD, Paint.bounds(stem))
+	var upper := _ellipse_arc(at + Vector2(0, -s * 1.0), Vector2(s * 2.1, s * 0.6), 0.0, PI, 14)
+	var lower := _ellipse_arc(at + Vector2(0, s * 0.2), Vector2(s * 3.6, s * 1.0), 0.0, PI, 18)
+	draw_polyline(upper, FOIL_GOLD[1], line, true)
+	draw_polyline(lower, FOIL_GOLD[1], line * 1.25, true)
+	var drop := at + Vector2(0, s * 1.75)
+	draw_colored_polygon(PackedVector2Array([drop + Vector2(0, -s * 0.6), drop + Vector2(s * 0.3, 0), drop + Vector2(0, s * 0.45), drop + Vector2(-s * 0.3, 0)]), Color("fff4d6"))
+	if w >= 40.0:
+		# Crystals hanging from the lower ring.
+		for i in range(1, 8):
+			var hook := lower[i * 2 + 1]
+			draw_line(hook, hook + Vector2(0, s * 0.45), Color(FOIL_GOLD[0] as Color, 0.7), line * 0.5, true)
+			_dot(hook + Vector2(0, s * 0.55), s * 0.11, Color("fff4d6"))
+	var candles: Array[Vector2] = []
+	for i in 3:
+		candles.append(upper[i * 7])
+	for i in 5:
+		candles.append(lower[floori(i * 4.5)])
+	for p in candles:
+		draw_line(p, p + Vector2(0, -s * 0.45), Color("fff1d6"), line, true)
+		var flame := p + Vector2(0, -s * 0.72)
+		_dot(flame, s * 0.6, Color("ffd27a", 0.22))
+		_dot(flame, s * 0.32, Color("ffe8b0", 0.75))
+		_dot(flame, s * 0.15, Color.WHITE)
+
+
+## 9 Carnival gold: a gilded jester's crown with bells and jewels on deep purple, gold
+## leaf flaking in from the corners and confetti in the air.
+func _back_carnival_gold(r: Rect2, panel: PackedVector2Array, inner: Rect2, k: float) -> void:
+	var w := r.size.x
+	var c := inner.get_center() + Vector2(0, inner.size.y * 0.04)
+	_gradient(panel, Color("5c1fa6"), Color("1d0640"))
+	_rays(c, 24, r.size.length(), Color(1, 1, 1, 0.04), panel)
+	_glow_in(c, w * 0.72, Color("c27bff", 0.45), panel)
+	_gold_leaf(inner, panel, w)
+	_confetti(inner, panel, c, w, k)
+	_glow_in(c, w * 0.42, Color("ffd36b", 0.35), panel)
+	_jester_crown(c, w * 0.3, k)
+
+
+## Gold leaf gilding the corners: a warm wash in each corner, big torn flakes tucked
+## into it and smaller ones drifting in towards the middle.
+func _gold_leaf(inner: Rect2, panel: PackedVector2Array, w: float) -> void:
+	var corners := [inner.position, Vector2(inner.end.x, inner.position.y), inner.end, Vector2(inner.position.x, inner.end.y)]
+	var centre := inner.get_center()
+	for corner: Vector2 in corners:
+		_glow_in(corner + (centre - corner).sign() * w * 0.04, w * 0.34, Color(FOIL_GOLD[1] as Color, 0.3), panel)
+	var deep: Color = FOIL_GOLD[3]
+	for i in (32 if w >= 40.0 else 16):
+		var corner: Vector2 = corners[i % 4]
+		var reach := Vector2(_noise(i, 1), _noise(i, 2))
+		reach = reach * reach * reach
+		var at := corner + (centre - corner).sign() * (Vector2(0.02, 0.02) * w + reach * inner.size * Vector2(0.55, 0.4))
+		var s := w * (0.035 + 0.045 * _noise(i, 3)) * (1.0 - 0.55 * minf(1.0, reach.length() * 1.6))
+		var turn := _noise(i, 4) * TAU
+		var flake := PackedVector2Array()
+		for j in 8:
+			flake.append(at + (Vector2.from_angle(j * TAU / 8.0) * s * (0.45 + 0.55 * _noise(i * 9 + j, 5)) * Vector2(1.0, 0.65)).rotated(turn))
+		var tone := (FOIL_GOLD[1] as Color).lerp(FOIL_GOLD[2], _noise(i, 6))
+		for piece in Geometry2D.intersect_polygons(flake, panel):
+			_gradient(piece, tone.lightened(0.3), tone.darkened(0.1))
+			if w >= 40.0:
+				draw_polyline(Paint.closed(piece), Color(deep, 0.45), maxf(0.3, w * 0.004), true)
+
+
+## Confetti in carnival colours, kept clear of the crown, and a few curling streamers.
+func _confetti(inner: Rect2, panel: PackedVector2Array, crown: Vector2, w: float, k: float) -> void:
+	var colours := [Color("ff5d8f"), Color("2fd3c0"), Color("ffd34d"), Color("fbf3e4"), Color("5b8cff"), Color("ff8a3d")]
+	for i in (40 if w >= 40.0 else 18):
+		var at := _scatter(inner.grow(-0.04 * w), i + 23)
+		if ((at - crown) / Vector2(w * 0.44, w * 0.36)).length() < 1.0:
+			continue
+		var turn := _noise(i, 8) * TAU
+		var piece := PackedVector2Array()
+		match i % 3:
+			0:
+				for corner: Vector2 in [Vector2(-1, -0.4), Vector2(1, -0.4), Vector2(1, 0.4), Vector2(-1, 0.4)]:
+					piece.append(at + (corner * w * 0.022).rotated(turn))
+			1:
+				piece = _circle(at, w * 0.012, 10)
+			_:
+				for j in 3:
+					piece.append(at + Vector2.from_angle(turn + j * TAU / 3.0) * w * 0.018)
+		for part in Geometry2D.intersect_polygons(piece, panel):
+			draw_colored_polygon(part, colours[i % colours.size()])
+	if w < 40.0:
+		return
+	for i in 6:
+		var from := _scatter(inner.grow(-0.08 * w), i + 91)
+		var heading := Vector2.from_angle(_noise(i, 9) * TAU)
+		var curl := PackedVector2Array()
+		var clear := true
+		for j in 13:
+			var t := j / 12.0
+			var at := from + heading * t * w * 0.16 + heading.orthogonal() * sin(t * TAU * 1.5) * w * 0.02
+			clear = clear and ((at - crown) / Vector2(w * 0.5, w * 0.42)).length() >= 1.0
+			curl.append(at)
+		if not clear:
+			continue
+		for seg in Geometry2D.intersect_polyline_with_polygon(curl, panel):
+			draw_polyline(seg, colours[(i * 2 + 1) % colours.size()], maxf(0.5, 0.55 * k), true)
+
+
+## A jester's crown in gold: three points ending in bells (the outer two curling out
+## like a jester's cap), a jewel inlaid down each point and a jewelled band.
+func _jester_crown(c: Vector2, s: float, k: float) -> void:
+	var points := [
+		[Vector2(-0.84, 0.24), Vector2(-1.08, -0.08), Vector2(-1.12, -0.74), Vector2(-0.5, -0.3), Vector2(-0.22, 0.24)],
+		[Vector2(0.22, 0.24), Vector2(0.5, -0.3), Vector2(1.12, -0.74), Vector2(1.08, -0.08), Vector2(0.84, 0.24)],
+		[Vector2(-0.34, 0.24), Vector2(-0.3, -0.45), Vector2(0.0, -1.04), Vector2(0.3, -0.45), Vector2(0.34, 0.24)],
+	]
+	var jewels := [Color("2fd3c0"), Color("2fd3c0"), Color("ff3b6b")]
+	var area := Rect2(c + Vector2(-1.25, -1.15) * s, Vector2(2.5, 1.7) * s)
+	var deep: Color = FOIL_GOLD[3]
+	var line := maxf(0.4, 0.45 * k)
+	for n in points.size():
+		var shape := _point_shape(c, s, points[n])
+		_foil(shape[0], FOIL_GOLD, area)
+		draw_colored_polygon(shape[1], Color(deep, 0.3))
+		draw_polyline(Paint.closed(shape[0]), Color(deep, 0.85), line, true)
+		if s > 6.5:
+			# A long ruby down the middle point, round stones on the curling ones.
+			var spine: PackedVector2Array = shape[2]
+			if n == 2:
+				_jewel(spine[3], spine[7], s * 0.07, jewels[n])
+			else:
+				_dot(spine[5], s * 0.085, Color(deep, 0.8))
+				_dot(spine[5], s * 0.068, jewels[n])
+				_dot(spine[5] + Vector2(-0.3, -0.3) * s * 0.068, s * 0.025, Color(1, 1, 1, 0.8))
+		var tip := c + (points[n][2] as Vector2) * s
+		_bell(tip, s * (0.17 if n == 2 else 0.15), k)
+	var band := Rect2(c + Vector2(-0.9, 0.14) * s, Vector2(1.8, 0.4) * s)
+	var band_shape := Paint.round_rect(band, s * 0.1)
+	_foil(band_shape, FOIL_GOLD, area)
+	draw_colored_polygon(PackedVector2Array([band.position + Vector2(0, band.size.y * 0.55), band.position + Vector2(band.size.x, band.size.y * 0.55), band.end, Vector2(band.position.x, band.end.y)]), Color(deep, 0.18))
+	draw_polyline(Paint.closed(band_shape), Color(deep, 0.9), line, true)
+	var mid := band.get_center()
+	if s > 12.0:
+		for x: float in [-0.74, -0.26, 0.26, 0.74]:
+			_dot(mid + Vector2(x * s, 0), s * 0.045, Color("fff8ee"))
+	for side: float in [-1.0, 1.0]:
+		var gem := mid + Vector2(side * s * 0.5, 0)
+		_dot(gem, s * 0.1, Color(deep, 0.8))
+		_dot(gem, s * 0.08, Color("22c493") if side < 0 else Color("4f8cff"))
+		_dot(gem + Vector2(-0.3, -0.3) * s * 0.08, s * 0.03, Color(1, 1, 1, 0.8))
+	var ruby := _diamond(mid, s * 0.13, s * 0.18)
+	draw_colored_polygon(_diamond(mid, s * 0.16, s * 0.21), Color(deep, 0.85))
+	_gradient(ruby, Color("ff7aa0"), Color("b0103e"))
+	_dot(mid + Vector2(-s * 0.035, -s * 0.06), s * 0.03, Color(1, 1, 1, 0.85))
+
+
+## 10 Starter's crest: a heraldic shield quartered in blues with a silver lozenge, under a
+## jester's cap, framed by laurels and a ribbon; silver on royal blue.
+func _back_starters_crest(r: Rect2, panel: PackedVector2Array, inner: Rect2, k: float) -> void:
+	var w := r.size.x
+	var c := inner.get_center() + Vector2(0, inner.size.y * 0.06)
+	_gradient(panel, Color("2f66d4"), Color("0a1d55"))
+	if w >= 40.0:
+		# A faint diaper of lozenges, like the engraving on a banknote.
+		for seg in _lattice(inner, panel, inner.size.x / 6.0, inner.size.x / 6.0 * 0.7):
+			draw_polyline(seg, Color(1, 1, 1, 0.07), maxf(0.35, 0.35 * k), true)
+	_glow_in(c, w * 0.66, Color("c4dbff", 0.42), panel)
+	_laurels(c, w, k)
+	_crest_shield(c, w * 0.22, k)
+	_jester_cap(c + Vector2(0, -w * 0.205), w * 0.2, k)
+	if w >= 40.0:
+		_ribbon(c + Vector2(0, w * 0.37), w * 0.34, k)
+		for side: float in [-1.0, 1.0]:
+			_star5(c + Vector2(side * w * 0.31, -w * 0.47), w * 0.045, FOIL_SILVER[1])
+
+
+## Two silver laurel branches curving up round the shield from its foot.
+func _laurels(c: Vector2, w: float, k: float) -> void:
+	var centre := c + Vector2(0, w * 0.02)
+	var radius := w * 0.36
+	var leaves := 7 if w >= 40.0 else 5
+	for side: float in [-1.0, 1.0]:
+		var stem := PackedVector2Array()
+		for i in 21:
+			stem.append(centre + Vector2.from_angle(PI / 2.0 - side * (0.2 + 1.8 * i / 20.0)) * radius)
+		draw_polyline(stem, FOIL_SILVER[2], maxf(0.5, 0.55 * k), true)
+		for j in leaves + 1:
+			var t := (j + 0.5) / (leaves + 1)
+			var a := PI / 2.0 - side * (0.2 + 1.8 * t)
+			var at := centre + Vector2.from_angle(a) * radius
+			var along := Vector2(-sin(a), cos(a)) * -side
+			var out := (at - centre).normalized()
+			var length := w * 0.11 * (1.0 - 0.3 * t)
+			if j == leaves:
+				_leaf(at, at + along * length, w * 0.045, FOIL_SILVER[1])
+				continue
+			_leaf(at, at + (along + out * 0.8).normalized() * length, w * 0.05, FOIL_SILVER[1])
+			_leaf(at, at + (along - out * 0.8).normalized() * length, w * 0.05, FOIL_SILVER[2])
+
+
+## A heater shield: a silver foil edge, a field quartered in two blues and a silver
+## lozenge (the Harlequin's diamond) in the middle.
+func _crest_shield(c: Vector2, s: float, k: float) -> void:
+	var top := c.y - s * 0.95
+	var shoulder := c.y + s * 0.15
+	var foot := Vector2(c.x, c.y + s * 1.3)
+	var shape := PackedVector2Array([Vector2(c.x - s, top), Vector2(c.x + s, top)])
+	shape.append_array(_bezier(Vector2(c.x + s, shoulder), Vector2(c.x + s, c.y + s * 0.95), foot, 10))
+	shape.append_array(_bezier(foot, Vector2(c.x - s, c.y + s * 0.95), Vector2(c.x - s, shoulder), 10).slice(1))
+	var shadow := PackedVector2Array()
+	for p in shape:
+		shadow.append(p + Vector2(0, s * 0.1))
+	draw_colored_polygon(shadow, Color(0.02, 0.05, 0.16, 0.4))
+	_foil(shape, FOIL_SILVER, Paint.bounds(shape))
+	var deep: Color = FOIL_SILVER[3]
+	var fields := Geometry2D.offset_polygon(shape, -s * 0.14)
+	if not fields.is_empty():
+		var field: PackedVector2Array = fields[0]
+		var split := c.y - s * 0.12
+		var dark := Color("1a46a8")
+		var light := Color("4f8cf0")
+		for quarter: Array in [[c.x - s * 2.0, top - s, split, dark], [c.x, top - s, split, light], [c.x - s * 2.0, split, foot.y + s, light], [c.x, split, foot.y + s, dark]]:
+			var x0: float = quarter[0]
+			var y0: float = quarter[1]
+			var y1: float = quarter[2]
+			var box := PackedVector2Array([Vector2(x0, y0), Vector2(x0 + s * 2.0, y0), Vector2(x0 + s * 2.0, y1), Vector2(x0, y1)])
+			var tint: Color = quarter[3]
+			for piece in Geometry2D.intersect_polygons(box, field):
+				_gradient(piece, tint.lightened(0.1), tint.darkened(0.15))
+		# A sheen across the upper left of the field.
+		var sheen := PackedVector2Array([Vector2(c.x - s, top), Vector2(c.x + s * 0.2, top), Vector2(c.x - s, c.y + s * 0.4)])
+		for piece in Geometry2D.intersect_polygons(sheen, field):
+			draw_colored_polygon(piece, Color(1, 1, 1, 0.12))
+		draw_polyline(Paint.closed(field), Color(deep, 0.7), maxf(0.4, 0.4 * k), true)
+		var at := Vector2(c.x, split + s * 0.04)
+		var lozenge := _diamond(at, s * 0.3, s * 0.46)
+		_foil(lozenge, FOIL_SILVER, Paint.bounds(lozenge))
+		draw_polyline(Paint.closed(lozenge), Color(deep, 0.9), maxf(0.4, 0.4 * k), true)
+		draw_colored_polygon(_diamond(at, s * 0.12, s * 0.19), dark)
+	draw_polyline(Paint.closed(shape), Color(deep, 0.95), maxf(0.45, 0.5 * k), true)
+
+
+## A jester's cap as the crest above the shield: three soft points in blue and silver,
+## a silver bell on each and a silver band.
+func _jester_cap(base: Vector2, s: float, k: float) -> void:
+	var points := [
+		[Vector2(-0.8, 0.0), Vector2(-1.15, -0.25), Vector2(-1.25, -0.78), Vector2(-0.55, -0.4), Vector2(-0.2, 0.0)],
+		[Vector2(0.2, 0.0), Vector2(0.55, -0.4), Vector2(1.25, -0.78), Vector2(1.15, -0.25), Vector2(0.8, 0.0)],
+		[Vector2(-0.32, 0.0), Vector2(-0.3, -0.5), Vector2(0.0, -1.05), Vector2(0.3, -0.5), Vector2(0.32, 0.0)],
+	]
+	var deep: Color = FOIL_SILVER[3]
+	var line := maxf(0.4, 0.45 * k)
+	var area := Rect2(base + Vector2(-1.3, -1.1) * s, Vector2(2.6, 1.3) * s)
+	for n in points.size():
+		var shape := _point_shape(base, s, points[n])
+		if n == 2:
+			_foil(shape[0], FOIL_SILVER, area)
+		else:
+			_gradient(shape[0], Color("3f7be8"), Color("173f9c"))
+		draw_colored_polygon(shape[1], Color(0.02, 0.06, 0.2, 0.28))
+		draw_polyline(Paint.closed(shape[0]), Color(deep, 0.9), line, true)
+		_bell(base + (points[n][2] as Vector2) * s, s * 0.15, k, FOIL_SILVER)
+	var band := Rect2(base + Vector2(-0.88, -0.08) * s, Vector2(1.76, 0.3) * s)
+	var band_shape := Paint.round_rect(band, s * 0.1)
+	_foil(band_shape, FOIL_SILVER, area)
+	draw_polyline(Paint.closed(band_shape), Color(deep, 0.9), line, true)
+	if s > 8.0:
+		for i in 5:
+			_dot(band.get_center() + Vector2((i - 2) * s * 0.34, 0), s * 0.05, Color("2456c0"))
+
+
+## A silver ribbon across the foot of the crest, its ends folded back and cut in a
+## swallowtail.
+func _ribbon(c: Vector2, half: float, k: float) -> void:
+	var h := half * 0.24
+	var deep: Color = FOIL_SILVER[3]
+	var line := maxf(0.4, 0.4 * k)
+	for side: float in [-1.0, 1.0]:
+		var root := c + Vector2(side * half * 0.86, -h * 0.05)
+		var tail := PackedVector2Array([root + Vector2(0, -h * 0.35), root + Vector2(side * half * 0.36, -h * 0.15),
+			root + Vector2(side * half * 0.26, h * 0.4), root + Vector2(side * half * 0.36, h * 0.95), root + Vector2(0, h * 0.75)])
+		_gradient(tail, FOIL_SILVER[2], deep)
+		draw_polyline(Paint.closed(tail), Color(deep, 0.9), line, true)
+		draw_colored_polygon(PackedVector2Array([root + Vector2(0, h * 0.2), root + Vector2(-side * half * 0.1, h * 0.55), root + Vector2(0, h * 0.75)]), deep)
+	var upper := PackedVector2Array()
+	var lower := PackedVector2Array()
+	for i in 13:
+		var x := lerpf(-half, half, i / 12.0)
+		var lift := -absf(x / half) * h * 0.4
+		upper.append(c + Vector2(x, lift - h / 2.0))
+		lower.append(c + Vector2(x, lift + h / 2.0))
+	var strip := upper.duplicate()
+	var under := lower.duplicate()
+	under.reverse()
+	strip.append_array(under)
+	_foil(strip, FOIL_SILVER, Paint.bounds(strip))
+	draw_polyline(Paint.closed(strip), Color(deep, 0.9), line, true)
+	# An engraved line along each edge and three blue stars, like a medal ribbon.
+	if k > 1.2:
+		var inset := Vector2(0, h * 0.2)
+		var top_line := PackedVector2Array()
+		var bottom_line := PackedVector2Array()
+		for i in upper.size():
+			top_line.append(upper[i] + inset)
+			bottom_line.append(lower[i] - inset)
+		draw_polyline(top_line.slice(1, top_line.size() - 1), Color(deep, 0.45), line * 0.7, true)
+		draw_polyline(bottom_line.slice(1, bottom_line.size() - 1), Color(deep, 0.45), line * 0.7, true)
+	for x: float in [-0.45, 0.0, 0.45]:
+		_star5(c + Vector2(x * half, -absf(x) * h * 0.4), h * 0.3, Color("2456c0"))
+
+
+## The outline of one point of a crown or cap from `spec` (base left, its curve's
+## control, tip, the other control, base right; in units of `s` from `c`), plus the half
+## that faces away from the light and the spine between the two.
+func _point_shape(c: Vector2, s: float, spec: Array) -> Array:
+	var base_left: Vector2 = c + (spec[0] as Vector2) * s
+	var bend_left: Vector2 = c + (spec[1] as Vector2) * s
+	var tip: Vector2 = c + (spec[2] as Vector2) * s
+	var bend_right: Vector2 = c + (spec[3] as Vector2) * s
+	var base_right: Vector2 = c + (spec[4] as Vector2) * s
+	var left_edge := _bezier(base_left, bend_left, tip, 10)
+	var right_edge := _bezier(tip, bend_right, base_right, 10)
+	var outline := left_edge.duplicate()
+	outline.append_array(right_edge.slice(1))
+	var spine := _bezier((base_left + base_right) / 2.0, (bend_left + bend_right) / 2.0, tip, 10)
+	var shade := spine.duplicate()
+	shade.append_array(right_edge.slice(1))
+	return [outline, shade, spine]
+
+
+## A jewel inlaid along a line, lit from the top left.
+func _jewel(from: Vector2, to: Vector2, half_w: float, colour: Color) -> void:
+	var mid := (from + to) / 2.0
+	var side := (to - from).orthogonal().normalized() * half_w
+	var gem := PackedVector2Array([from, mid + side, to, mid - side])
+	draw_colored_polygon(gem, colour.darkened(0.25))
+	draw_colored_polygon(PackedVector2Array([from, mid + side, mid, mid - side]), colour.lightened(0.15))
+	_dot(from.lerp(to, 0.3), half_w * 0.35, Color(1, 1, 1, 0.8))
+
+
+## A round bell: a domed metal ball with a dark slot.
+func _bell(at: Vector2, radius: float, k: float, tones: Array = FOIL_GOLD) -> void:
+	_foil_disc(at, radius, tones, k)
+	if radius > 1.5:
+		var deep: Color = tones[3]
+		draw_line(at + Vector2(-radius * 0.55, radius * 0.3), at + Vector2(radius * 0.55, radius * 0.3), Color(deep, 0.9), maxf(0.4, radius * 0.16), true)
+		_dot(at + Vector2(0, radius * 0.55), radius * 0.16, deep)
+
+
+## A domed metal disc lit from the top left, with a dark rim and, when big enough, an
+## engraved ring.
+func _foil_disc(c: Vector2, radius: float, tones: Array, k: float) -> void:
+	var focus := c + Vector2(-0.35, -0.4) * radius
+	var span := radius * 1.75
+	_fan(focus, _circle(c, radius, 40), func(p: Vector2) -> Color: return _ramp(p.distance_to(focus) / span, tones))
+	var deep: Color = tones[3]
+	draw_arc(c, radius, 0.0, TAU, 40, Color(deep, 0.9), maxf(0.4, 0.45 * k), true)
+	if radius > 6.0:
+		var groove := maxf(0.35, 0.35 * k)
+		draw_arc(c, radius * 0.78, 0.0, TAU, 36, Color(deep, 0.35), groove, true)
+		draw_arc(c, radius * 0.78 + groove, PI * 1.05, PI * 1.6, 12, Color(tones[0] as Color, 0.6), groove * 0.8, true)
+
+
+## A five-pointed star.
+func _star5(at: Vector2, s: float, colour: Color) -> void:
+	var points := PackedVector2Array()
+	for i in 10:
+		points.append(at + Vector2.from_angle(-PI / 2.0 + i * PI / 5.0) * (s if i % 2 == 0 else s * 0.42))
+	draw_colored_polygon(points, colour)
+
+
+## A four-pointed twinkle.
+func _sparkle(at: Vector2, s: float, colour: Color) -> void:
+	var points := PackedVector2Array()
+	for i in 8:
+		points.append(at + Vector2.from_angle(-PI / 2.0 + i * PI / 4.0) * (s if i % 2 == 0 else s * 0.22))
+	draw_colored_polygon(points, colour)
+	_dot(at, s * 0.2, Color(1, 1, 1, colour.a))
+
+
+## Wedges of light from `at`, every other one of `count`, kept inside `clip`.
+func _rays(at: Vector2, count: int, far: float, colour: Color, clip: PackedVector2Array) -> void:
+	for i in range(0, count, 2):
+		var wedge := PackedVector2Array([at, at + Vector2.from_angle(i * TAU / count) * far, at + Vector2.from_angle((i + 1) * TAU / count) * far])
+		for piece in Geometry2D.intersect_polygons(wedge, clip):
+			draw_colored_polygon(piece, colour)
+
+
+## The lines of a diamond lattice over `inner` (diamonds `cell` wide and `half_h` * 2
+## tall, rows offset by half a diamond), clipped to `clip`.
+func _lattice(inner: Rect2, clip: PackedVector2Array, cell: float, half_h: float) -> Array[PackedVector2Array]:
+	var lines: Array[PackedVector2Array] = []
+	var steps := ceili(inner.size.y / half_h) + 3
+	for j in range(-steps, 6 + steps):
+		var start := Vector2(inner.position.x + j * cell, inner.position.y - half_h)
+		for dir: Vector2 in [Vector2(cell / 2.0, half_h), Vector2(-cell / 2.0, half_h)]:
+			lines.append_array(Geometry2D.intersect_polyline_with_polygon(PackedVector2Array([start, start + dir * steps]), clip))
+	return lines
+
+
+## Soft light from `at`, fading to nothing by `radius`, kept inside the convex `clip`:
+## rings of points on spokes from the middle, each spoke stopped at the clip's edge.
+func _glow_in(at: Vector2, radius: float, colour: Color, clip: PackedVector2Array) -> void:
+	var spokes := 48
+	var rings := 5
+	var points := PackedVector2Array([at])
+	var colours := PackedColorArray([colour])
+	var indices := PackedInt32Array()
+	for i in spokes:
+		var dir := Vector2.from_angle(i * TAU / spokes)
+		var reach := _reach(at, dir, radius, clip)
+		for j in rings:
+			var d := minf(reach, radius * (j + 1) / rings)
+			points.append(at + dir * d)
+			colours.append(Color(colour, colour.a * pow(1.0 - d / radius, 1.8)))
+	for i in spokes:
+		var next := (i + 1) % spokes
+		indices.append_array(PackedInt32Array([0, 1 + i * rings, 1 + next * rings]))
+		for j in rings - 1:
+			var a := 1 + i * rings + j
+			var b := 1 + next * rings + j
+			indices.append_array(PackedInt32Array([a, b, b + 1, a, b + 1, a + 1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), indices, points, colours)
+
+
+## How far from `at` along `dir` (at most `far`) before leaving the convex `clip`.
+static func _reach(at: Vector2, dir: Vector2, far: float, clip: PackedVector2Array) -> float:
+	var best := far
+	var far_point := at + dir * far
+	for i in clip.size():
+		var hit: Variant = Geometry2D.segment_intersects_segment(at, far_point, clip[i], clip[(i + 1) % clip.size()])
+		if hit is Vector2:
+			best = minf(best, at.distance_to(hit))
+	return best
+
+
+## Fill the shape `outline` encloses as a fan of triangles from `focus` (which must see
+## every point of it, as the middle of a circle does), coloured per point. Light that
+## spreads from one spot stays smooth this way, where a plain polygon would band.
+func _fan(focus: Vector2, outline: PackedVector2Array, colour_at: Callable) -> void:
+	var points := PackedVector2Array([focus])
+	var colours := PackedColorArray([colour_at.call(focus)])
+	var indices := PackedInt32Array()
+	var n := outline.size()
+	for i in n:
+		points.append(outline[i])
+		colours.append(colour_at.call(outline[i]))
+		indices.append_array(PackedInt32Array([0, i + 1, (i + 1) % n + 1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), indices, points, colours)
+
+
+## Fill the ring between two outlines that pair up point for point, coloured per point.
+func _band(outer: PackedVector2Array, inner: PackedVector2Array, colour_at: Callable) -> void:
+	var points := PackedVector2Array()
+	var colours := PackedColorArray()
+	var indices := PackedInt32Array()
+	var n := outer.size()
+	for i in n:
+		points.append(outer[i])
+		points.append(inner[i])
+		colours.append(colour_at.call(outer[i]))
+		colours.append(colour_at.call(inner[i]))
+		var a := i * 2
+		var b := ((i + 1) % n) * 2
+		indices.append_array(PackedInt32Array([a, b, b + 1, a, b + 1, a + 1]))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), indices, points, colours)
+
+
+## Fill a shape with metal foil (see _metal_at) mapped over `area`, with extra points
+## along long edges so the streaks can bend across it.
+func _foil(points: PackedVector2Array, tones: Array, area: Rect2) -> void:
+	var dense := _dense(points, maxf(1.0, area.size.x * 0.08))
+	var colours := PackedColorArray()
+	for p in dense:
+		colours.append(_metal_at(p, area, tones))
+	draw_polygon(dense, colours)
+
+
+## The foil's colour at `p` within `area`. The streaks run on the diagonal, so when
+## `area` is the whole card the frame and the emblem catch the same light.
+static func _metal_at(p: Vector2, area: Rect2, tones: Array) -> Color:
+	var t := ((p.x - area.position.x) * 0.8 + (p.y - area.position.y) * 0.6) / maxf(0.001, area.size.x * 0.8 + area.size.y * 0.6)
+	return _metal(t, tones)
+
+
+## The foil's colour at `t` (0-1) along FOIL_STOPS.
+static func _metal(t: float, tones: Array) -> Color:
+	t = clampf(t, 0.0, 1.0)
+	for i in range(1, FOIL_STOPS.size()):
+		var stop: Array = FOIL_STOPS[i]
+		if t <= float(stop[0]):
+			var before: Array = FOIL_STOPS[i - 1]
+			var from: Color = tones[int(before[1])]
+			return from.lerp(tones[int(stop[1])], (t - float(before[0])) / (float(stop[0]) - float(before[0])))
+	return tones[1]
+
+
+## Highlight to body to shadow of a foil (t 0-1), for domes and facets.
+static func _ramp(t: float, tones: Array) -> Color:
+	t = clampf(t, 0.0, 1.0)
+	var hi: Color = tones[0]
+	var body: Color = tones[1]
+	var low: Color = tones[2]
+	return hi.lerp(body, t * 2.0) if t < 0.5 else body.lerp(low, t * 2.0 - 1.0)
+
+
+## A metal facet's colour: bright when it faces the top-left light, deep facing away.
+static func _facet(normal_angle: float, tones: Array) -> Color:
+	return _ramp(0.5 - 0.5 * cos(normal_angle - LIGHT_ANGLE), tones)
+
+
+## A rounded rectangle with the same number of points at any size, so an outer and an
+## inner one pair up point for point (see _band). `per_side` splits each straight side.
+static func _rounded_ring(r: Rect2, radius: float, per_side := 8) -> PackedVector2Array:
+	radius = clampf(radius, 0.5, minf(r.size.x, r.size.y) / 2.0 - 0.05)
+	var centres := [Vector2(r.end.x - radius, r.position.y + radius), Vector2(r.end.x - radius, r.end.y - radius),
+		Vector2(r.position.x + radius, r.end.y - radius), Vector2(r.position.x + radius, r.position.y + radius)]
+	var points := PackedVector2Array()
+	for corner in 4:
+		var start := -PI / 2.0 + corner * PI / 2.0
+		var centre: Vector2 = centres[corner]
+		for i in 6:
+			points.append(centre + Vector2.from_angle(start + i * PI / 10.0) * radius)
+		var from := points[points.size() - 1]
+		var to: Vector2 = (centres[(corner + 1) % 4] as Vector2) + Vector2.from_angle(start + PI / 2.0) * radius
+		for i in range(1, per_side):
+			points.append(from.lerp(to, float(i) / per_side))
+	return points
+
+
+## Extra points along edges longer than `spacing`, so colours given per point can vary
+## along them.
+static func _dense(points: PackedVector2Array, spacing: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for i in points.size():
+		var a := points[i]
+		var b := points[(i + 1) % points.size()]
+		out.append(a)
+		var n := floori(a.distance_to(b) / spacing)
+		for j in range(1, n):
+			out.append(a.lerp(b, float(j) / n))
+	return out
+
+
+static func _circle(at: Vector2, radius: float, n := 32) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in n:
+		points.append(at + Vector2.from_angle(i * TAU / n) * radius)
+	return points
+
+
+static func _ellipse_arc(c: Vector2, radii: Vector2, from_angle: float, to_angle: float, steps: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in steps + 1:
+		var a := lerpf(from_angle, to_angle, float(i) / steps)
+		points.append(c + Vector2(cos(a) * radii.x, sin(a) * radii.y))
+	return points
+
+
+static func _bezier(a: Vector2, control: Vector2, b: Vector2, steps: int) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	for i in steps + 1:
+		var t := float(i) / steps
+		points.append(a.lerp(control, t).lerp(control.lerp(b, t), t))
+	return points
+
+
+## A fixed pseudo-random number in 0-1 for (n, salt): integer hashing, so it is the same
+## on every bake and every device.
+static func _noise(n: int, salt := 0) -> float:
+	var x := ((n * 73856093) ^ (salt * 19349663)) & 0xFFFFFFF
+	x = ((x ^ (x >> 13)) * 1274126177) & 0xFFFFFFFFFFFF
+	x = x ^ (x >> 16)
+	return float(x & 0xFFFF) / 65535.0
 
 
 func _draw_playing(r: Rect2) -> void:

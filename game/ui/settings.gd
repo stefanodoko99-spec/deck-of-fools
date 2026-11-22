@@ -15,7 +15,11 @@ const CRT_NAMES := ["Off", "Light", "Full"]
 const SPEEDS := [1, 2, 4]
 const SIZE_NAMES := ["Small", "Normal", "Large"]
 const VIBRATION_NAMES := ["Off", "Light", "Strong"]
-const CARD_BACKS := ["Harlequin", "Sun and moon", "Venetian mask", "Curtain", "Night sky", "Gold filigree"]
+## Every card back by number, as CardView draws them. 0-5 are free for everyone; 6-10
+## are sold in the shop, so their names come from the catalogue that sells them.
+const CARD_BACKS := ["Harlequin", "Sun and moon", "Venetian mask", "Curtain", "Night sky", "Gold filigree",
+	ShopCatalog.BACK_NAMES[6], ShopCatalog.BACK_NAMES[7], ShopCatalog.BACK_NAMES[8], ShopCatalog.BACK_NAMES[9],
+	ShopCatalog.BACK_NAMES[10]]
 
 static var reduce_motion := false
 static var sound := true
@@ -30,6 +34,9 @@ const LOOK_VERSION := 2
 static var speed := 1
 static var size := 1
 static var vibration_level := 1
+## The player's chosen card back. It is kept even while they don't own it (after a
+## refund, or a cloud save from before they bought it), so the choice comes back with
+## the purchase; shown_back() is what the cards actually wear.
 static var card_back := 0
 
 static var seen_help := false
@@ -61,7 +68,7 @@ static func load_saved() -> void:
 			size = clampi(int(data.get("size", size)), 0, 2)
 			var old_vibration: Variant = data.get("vibration")
 			vibration_level = clampi(int(data.get("vibration_level", 1 if old_vibration == null or bool(old_vibration) else 0)), 0, 2)
-			card_back = clampi(int(data.get("card_back", card_back)), 0, CARD_BACKS.size() - 1)
+			card_back = _saved_back(data.get("card_back", card_back))
 			seen_help = bool(data.get("seen_help", seen_help))
 			asked_account = bool(data.get("asked_account", asked_account))
 			tutorial_step = int(data.get("tutorial_step", tutorial_step))
@@ -87,6 +94,45 @@ static func text_scale() -> float:
 
 static func card_scale() -> float:
 	return [0.92, 1.0, 1.1][size]
+
+
+## The name of card back `index`, for the settings and the shop.
+static func back_name(index: int) -> String:
+	return CARD_BACKS[clampi(index, 0, CARD_BACKS.size() - 1)]
+
+
+## Whether the player may use card back `index`: the free ones always, the shop's
+## ones once `wallet` owns them.
+static func owns_back(index: int, wallet: Wallet) -> bool:
+	if index < 0 or index >= CARD_BACKS.size():
+		return false
+	if wallet == null:
+		return ShopCatalog.back_id(index) == ""
+	return ShopCatalog.back_unlocked(index, wallet)
+
+
+## The back the player's cards wear: their choice while they own it, otherwise the
+## Harlequin, so a locked back is never shown as theirs.
+static func shown_back(wallet: Wallet) -> int:
+	return card_back if owns_back(card_back, wallet) else 0
+
+
+## The next back after the chosen one that the player owns, wrapping round to the
+## Harlequin: where a "Next design" button should step, skipping backs still for sale.
+static func next_back(wallet: Wallet) -> int:
+	for offset in range(1, CARD_BACKS.size()):
+		var index := (card_back + offset) % CARD_BACKS.size()
+		if owns_back(index, wallet):
+			return index
+	return 0
+
+
+## A saved card back as a number the game can draw. Old settings files only knew backs
+## 0-5, JSON gives numbers back as floats, and a hand-edited file may hold anything.
+static func _saved_back(value: Variant) -> int:
+	if value is int or value is float or value is String:
+		return clampi(int(value), 0, CARD_BACKS.size() - 1)
+	return card_back
 
 
 static func _system_prefers_less_motion() -> bool:

@@ -1,7 +1,7 @@
 // A card face: a fake 3D tilt toward the pointer (the far edge shrinks, as in perspective),
 // a soft highlight that slides with the tilt, and the foil of special editions:
 // 1 Silvered (a cool metallic sweep), 2 Opaline (pink-pearl shimmer), 3 Prismatic (a moving
-// rainbow), 4 Shadow (a dark sheen).
+// rainbow), 4 Shadow (a dark sheen); and 5, the glint of a premium card back.
 shader_type canvas_item;
 
 uniform vec2 tilt = vec2(0.0);
@@ -44,6 +44,14 @@ void fragment() {
 		col = mix(col, col * 0.6 + rainbow * 0.55, 0.42);
 	} else if (foil == 4) {
 		col = mix(col, col * vec3(0.55, 0.5, 0.7), 0.4) + smoothstep(0.25, 0.0, abs(band)) * 0.1;
+	} else if (foil == 5) {
+		// Every few seconds a narrow glint glides across the back. Only the bright parts
+		// light up (the gold or silver foil, glass highlights), so it reads as metal
+		// catching the light rather than a wash over the picture; the tilt nudges it.
+		float metal = smoothstep(0.5, 0.85, dot(col, vec3(0.299, 0.587, 0.114)));
+		float sweep = fract(TIME * 0.16) * 3.2 - 1.0;
+		float glint = smoothstep(0.14, 0.0, abs(uv.x * 0.8 + uv.y * 0.6 - sweep + tilt.x * 0.3 + tilt.y * 0.2));
+		col += glint * metal * 0.45;
 	}
 	COLOR = vec4(col + gloss, base.a) * COLOR;
 }
