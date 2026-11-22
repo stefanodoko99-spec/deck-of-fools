@@ -13,6 +13,7 @@ A poker-hand roguelike about a travelling commedia dell'arte troupe. Travel thro
 | `site/` | The `deck-of-fools` Cloudflare Worker that serves the web export. |
 | `api/` | The `deck-of-fools-api` Worker: accounts, saves, runs, daily run, leaderboards (D1 database `deck-of-fools`). |
 | `build.sh` | Exports the game for the web into `build/web/` and gzips the wasm. |
+| `test.sh` | Runs the headless tests in `game/tests/` and the play bot (see below). |
 | `art.sh` | Adds a Jester illustration to `game/art/jesters/` (see [docs/ART.md](docs/ART.md)). |
 
 This repository was rebuilt from the live build on 2026-11-21 because the original project folder was lost. See [RECOVERY.md](RECOVERY.md) for what came back and what didn't.
@@ -27,6 +28,16 @@ cd site && npx wrangler deploy
 ```
 
 `index.wasm` is about 38 MiB, over the 25 MiB limit for a Workers static asset, so `build.sh` ships it as `index.wasm.gz` and `site/worker.js` serves it with `Content-Encoding: gzip`.
+
+## Run the tests
+
+```sh
+./test.sh            # about a minute: unit tests, 48 complete bot runs, 8 challenges, 24 wandering runs
+./test.sh --fast     # a few seconds of bot play instead
+./test.sh --only=profile --verbose
+```
+
+Every `game/tests/test_*.gd` is a suite (`game/tests/suite.gd` explains the rules); they run headless in `res://tests/run_tests.tscn`, with the Online autoload inert and pointed at a closed local port. `game/tests/bot.gd` plays whole runs through `RunState.apply()` only; its numbers (towns reached, shows won, ducats per show and per run) are printed and written to `build/bot_stats.json`. A test marked `known_bug()` pins a bug that isn't fixed yet: it shows as XFAIL and doesn't fail the run, and once the bug is fixed it shows as XPASS and fails until the marker is removed. `game/tests/` is left out of the release exports.
 
 ## Build the iPhone app
 
