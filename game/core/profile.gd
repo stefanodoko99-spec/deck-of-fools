@@ -16,6 +16,11 @@ var challenges_won: Dictionary = {}
 
 var badges: Dictionary = {}
 
+## For the Jester collection: how many finished runs each Jester was in at the end,
+## and how many of those were won. Counted from 22 November 2026 on.
+var jester_runs: Dictionary = {}
+var jester_wins: Dictionary = {}
+
 
 
 func record_run(run: RunState) -> void:
@@ -24,6 +29,13 @@ func record_run(run: RunState) -> void:
 	for f in run.feats:
 		feats[f] = true
 	signs_used += int(run.counters.get("used_sign", 0))
+	var held := {}
+	for z in run.zanni:
+		held[z.def_id] = true
+	for id in held:
+		jester_runs[id] = int(jester_runs.get(id, 0)) + 1
+		if run.won:
+			jester_wins[id] = int(jester_wins.get(id, 0)) + 1
 	if run.won and run.mode != "tour":
 		pass  # Quick runs and boss rushes don't unlock decks, stakes or badges.
 	elif run.won:
@@ -86,6 +98,7 @@ func to_dict() -> Dictionary:
 		"discovered": discovered.keys(), "feats": feats.keys(), "best_stake": best_stake.duplicate(),
 		"total_wins": total_wins, "runs_lost": runs_lost, "signs_used": signs_used,
 		"challenges_won": challenges_won.keys(), "badges": badges.duplicate(),
+		"jester_runs": jester_runs.duplicate(), "jester_wins": jester_wins.duplicate(),
 	}
 
 
@@ -104,4 +117,8 @@ static func from_dict(d: Dictionary) -> Profile:
 		p.challenges_won[str(c)] = true
 	for z in d.get("badges", {}):
 		p.badges[str(z)] = int(d["badges"][z])
+	for z in d.get("jester_runs", {}):
+		p.jester_runs[str(z)] = int(d["jester_runs"][z])
+	for z in d.get("jester_wins", {}):
+		p.jester_wins[str(z)] = int(d["jester_wins"][z])
 	return p

@@ -6,6 +6,8 @@ extends RefCounted
 ##   ?screen=items              Tarocchi, Signs, Omens, Warrants, Patrons, Favors, packs
 ##   ?screen=big                a few faces at large size, to judge detail
 ##   ?screen=menu | run         the real screens
+##   ?screen=collection&page=2  the Jester collection (&inspect=z_zanni opens one up close)
+## Add &found=60 to menu or collection to pretend that many Jesters have been met.
 ##   ?screen=sky                the backdrop alone
 ## Add &mood=patron|shop|menu|show&town=3 to set the backdrop, and
 ## &energy=0..1 &confetti=0..1 &pulse=1 &gloom=1 to see how it reacts to play.
@@ -39,7 +41,16 @@ static func open(main: Control, request: Dictionary) -> void:
 		again.timeout.connect(Feel.celebrate.bind(burst))
 		main.add_child(again)
 	match screen:
-		"menu":
+		"menu", "collection":
+			if request.has("found") or screen == "collection":
+				_seed_profile(int(request.get("found", "48")))
+				main.call("_show_menu")
+			if screen == "collection":
+				var sheet := CollectionSheet.new()
+				sheet.page = int(request["page"]) - 1
+				UiTheme.show_sheet(sheet)
+				if request.has("inspect"):
+					sheet.call_deferred("_open", maxi(0, sheet.entries().find(str(request["inspect"]))))
 			return
 		"sky":
 			main.call("_clear")
@@ -111,6 +122,27 @@ static func open(main: Control, request: Dictionary) -> void:
 		stage.add_child(v)
 		x += v.size.x + 6.0
 		row_h = maxf(row_h, v.size.y)
+
+
+## A made-up profile for the gallery (never saved): every third Jester met, the two
+## illustrated ones included, with a few runs, wins and stake medals.
+static func _seed_profile(count: int) -> void:
+	var p := Game.profile
+	var ids := CollectionSheet.numbered()
+	var added := 0
+	for k in ids.size():
+		if added >= count:
+			break
+		var id: String = ids[k]
+		if (k % 3 == 0 or id in ["z_arlecchino", "z_zanni"]) and p.is_unlocked(id):
+			p.discovered[id] = true
+			added += 1
+	p.badges["z_arlecchino"] = 3
+	p.badges["z_zanni"] = 1
+	p.jester_runs["z_arlecchino"] = 7
+	p.jester_wins["z_arlecchino"] = 2
+	p.jester_runs["z_zanni"] = 4
+	p.jester_wins["z_zanni"] = 1
 
 
 static func _playing(id: int, rank: int, suit: int, enhancement: String, edition: String, view_size := Vector2(52, 72)) -> CardView:

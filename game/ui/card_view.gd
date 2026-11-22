@@ -102,8 +102,14 @@ var baking := false
 ## Illustrated art for this card, loaded before the bake. Loading a texture for the
 ## first time inside _draw gives a blank white image in the one-shot bake.
 var art_texture: Texture2D = null
+## The big card in the collection's inspect view: a deeper tilt drawn on a fine mesh
+## (CardMesh), a brighter sheen, a gentle idle sway and a shadow that moves with it.
+var showcase := false
+## Report sideways swipes too (the inspect view flips to the next Jester with them).
+var swipe_sideways := false
 
 var _face: TextureRect
+var _mesh: CardMesh
 var _overlay: Control
 var _material: ShaderMaterial
 var _tilt := Vector2.ZERO
@@ -144,14 +150,25 @@ func _ready() -> void:
 		_material.set_shader_parameter("card_size", size)
 		_material.set_shader_parameter("foil", 0 if face_down else FOILS.get(edition, 0))
 		_face.material = _material
+	if showcase:
+		_mesh = CardMesh.new(size)
+		_mesh.material = _material
+		add_child(_mesh)
+		move_child(_mesh, _overlay.get_index())
+		_face.visible = false
+		if _material != null:
+			_material.set_shader_parameter("depth", 0.34)
+			_material.set_shader_parameter("shine", 1.8)
 	set_art(CardArt.request(self))
-	set_process(_material != null or sway >= 0)
+	set_process(_material != null or sway >= 0 or showcase)
 
 
 
 func set_art(texture: Texture2D) -> void:
 	if _face != null and texture != null:
 		_face.texture = texture
+		if _mesh != null:
+			_mesh.texture = texture
 
 
 
@@ -192,13 +209,20 @@ func _process(delta: float) -> void:
 		if sway >= 0 and _gesture != "drag":
 			rotation = sin(t * 1.6 + sway * 0.9) * 0.025
 		var target := Vector2.ZERO
-		if _hovered or _gesture != "":
+		# On a touch screen the pointer stays where the finger lifted, so a showcase
+		# card follows it only while touched and otherwise sways on its own.
+		var follow := _gesture != "" or (_hovered and not (showcase and DisplayServer.is_touchscreen_available()))
+		if follow:
 			target = ((get_local_mouse_position() / size) - Vector2(0.5, 0.5)) * 2.0
+		elif showcase:
+			target = Vector2(sin(t * 0.9), sin(t * 1.3 + 1.0)) * 0.45
 		elif sway >= 0:
 			target = Vector2(sin(t * 1.1 + sway), cos(t * 0.8 + sway * 1.3)) * 0.18
 		_tilt = _tilt.lerp(target.clamp(Vector2(-1, -1), Vector2(1, 1)), clampf(delta * 10.0, 0.0, 1.0))
 	if _material != null:
 		_material.set_shader_parameter("tilt", _tilt)
+	if showcase:
+		queue_redraw()
 
 
 
@@ -226,7 +250,10 @@ func _gui_input(event: InputEvent) -> void:
 				"drag":
 					drag_ended.emit(self, event.global_position)
 				"swipe":
-					if absf(moved.y) > 26.0:
+					if swipe_sideways and absf(moved.x) > absf(moved.y):
+						if absf(moved.x) > 26.0:
+							swiped.emit(self, 1 if moved.x < 0 else -1)
+					elif absf(moved.y) > 26.0:
 						swiped.emit(self, 1 if moved.y < 0 else -1)
 			_gesture = ""
 			accept_event()
@@ -234,6 +261,8 @@ func _gui_input(event: InputEvent) -> void:
 		var moved: Vector2 = event.global_position - _press_at
 		if _gesture == "press" and moved.length() > 9.0:
 			if swipeable and absf(moved.y) > absf(moved.x) * 1.2:
+				_gesture = "swipe"
+			elif swipe_sideways and absf(moved.x) > absf(moved.y):
 				_gesture = "swipe"
 			elif draggable and absf(moved.x) >= absf(moved.y):
 				_gesture = "drag"
@@ -249,7 +278,7 @@ func _lift(up: bool) -> void:
 	_hovered = up
 	if _gesture != "drag":
 		z_index = 1 if up else 0
-	if Settings.reduce_motion or baking:
+	if Settings.reduce_motion or baking or showcase:
 		return
 	var t := create_tween()
 	t.tween_property(self, "scale", Vector2.ONE * (1.08 if up else 1.0), 0.08)
@@ -259,6 +288,13 @@ func _lift(up: bool) -> void:
 func _draw() -> void:
 	if baking:
 		_paint_face(Rect2(Vector2.ZERO, size))
+		return
+	if showcase:
+		# A soft shadow under a card held above the table, sliding away from the tilt.
+		var drop := Vector2(-_tilt.x * 7.0, 12.0 - _tilt.y * 5.0)
+		for i in 5:
+			var spread := 2.0 + i * 3.0
+			draw_colored_polygon(_round_rect(Rect2(drop - Vector2(spread, spread) * 0.5, size + Vector2(spread, spread)), 8.0 + i * 2.0), Color(0, 0, 0, 0.09))
 		return
 	draw_colored_polygon(_round_rect(Rect2(Vector2(1.5, 3.5), size), 5.0), Color(0, 0, 0, 0.38))
 

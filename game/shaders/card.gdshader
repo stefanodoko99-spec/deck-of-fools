@@ -8,14 +8,17 @@ uniform vec2 tilt = vec2(0.0);
 uniform vec2 card_size = vec2(60.0, 84.0);
 uniform int foil = 0;
 uniform float shine = 1.0;
+// How far the far edge recedes at full tilt. Hand cards use a gentle 0.16; the
+// collection's big inspect card (drawn as a fine mesh, see CardMesh) goes deeper.
+uniform float depth = 0.16;
 
 varying vec2 local_uv;
 
 void vertex() {
 	vec2 c = card_size * 0.5;
 	vec2 p = VERTEX - c;
-	float depth = 1.0 + (p.x / card_size.x) * tilt.x * 0.16 + (p.y / card_size.y) * tilt.y * 0.16;
-	VERTEX = c + p / depth;
+	float d = 1.0 + (p.x / card_size.x) * tilt.x * depth + (p.y / card_size.y) * tilt.y * depth;
+	VERTEX = c + p / d;
 	local_uv = UV;
 }
 

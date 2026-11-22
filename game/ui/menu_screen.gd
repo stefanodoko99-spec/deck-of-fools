@@ -211,6 +211,7 @@ func _build_side(stage: Control) -> void:
 		tour.add_child(_words(RUN_WORDS, 8, UiTheme.TEXT, 0.0, RIGHT_W - 14.0))
 
 	_build_daily(col)
+	_build_collection(col)
 
 
 
@@ -239,6 +240,68 @@ func _build_daily(col: Control) -> void:
 	row.add_child(practice)
 	box.add_child(row)
 
+
+
+## The way into the Jester collection: a small fan of Jesters you've met (illustrated
+## ones first), how many of the 150 you've found, and a chevron. The whole card is a button.
+func _build_collection(col: Control) -> void:
+	var all := CollectionSheet.numbered()
+	var found := all.filter(func(id: String) -> bool: return Game.profile.discovered.has(id))
+	var shown: Array = found.filter(func(id: String) -> bool: return CardView.art_for("zanni", id) != null)
+	for id: String in found:
+		if shown.size() >= 3:
+			break
+		if not shown.has(id):
+			shown.append(id)
+	var button := Button.new()
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	button.custom_minimum_size = Vector2(RIGHT_W, 62)
+	var normal := UiTheme.panel_box(UiTheme.PANEL, UiTheme.GOLD.darkened(0.35))
+	var hover := UiTheme.panel_box(UiTheme.PANEL_LIGHT, UiTheme.GOLD.darkened(0.2))
+	button.add_theme_stylebox_override("normal", normal)
+	button.add_theme_stylebox_override("hover", hover)
+	button.add_theme_stylebox_override("pressed", hover)
+	button.pressed.connect(func() -> void: _open(CollectionSheet.new()))
+	UiTheme._press_feel(button)
+	col.add_child(button)
+	# A fan of three small cards on the left, the best one in the middle and on top.
+	for slot in [0, 2, 1]:
+		var pick: int = [1, 0, 2][slot]
+		var card := CardView.new(Vector2(32, 45))
+		card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if pick < shown.size():
+			card.kind = "zanni"
+			card.def_id = str(shown[pick])
+		else:
+			card.face_down = true
+		card.position = Vector2(8 + slot * 19, 7 + absf(slot - 1) * 2.0)
+		card.rotation = (slot - 1) * 0.2
+		button.add_child(card)
+	var title := UiTheme.title("Jester collection", 12, UiTheme.GOLD)
+	title.position = Vector2(84, 10)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(title)
+	var count := UiTheme.label("%d of %d found" % [found.size(), all.size()], 9, UiTheme.MUTED)
+	count.position = Vector2(84, 28)
+	count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(count)
+	var share := float(found.size()) / maxf(1.0, all.size())
+	var bar := Control.new()
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.position = Vector2(85, 45)
+	bar.size = Vector2(RIGHT_W - 130, 4)
+	bar.draw.connect(func() -> void:
+		var r := Rect2(Vector2.ZERO, bar.size)
+		bar.draw_style_box(UiTheme.box(Color(1, 1, 1, 0.12), Color(0, 0, 0, 0), 99), r)
+		if share > 0.0:
+			r.size.x = maxf(r.size.y, r.size.x * share)
+			bar.draw_style_box(UiTheme.box(UiTheme.GOLD, Color(0, 0, 0, 0), 99), r))
+	button.add_child(bar)
+	var chevron := UiIcon.new("forward", UiTheme.MUTED)
+	chevron.position = Vector2(RIGHT_W - 30, 21)
+	chevron.size = Vector2(20, 20)
+	button.add_child(chevron)
 
 
 func _fetch_daily() -> void:
