@@ -150,7 +150,15 @@ static func from_dict(d: Dictionary) -> Wallet:
 	if history is Array:
 		for p: Variant in history:
 			if p is Dictionary:
-				w.purchases.append((p as Dictionary).duplicate())
+				# JSON turns whole numbers into floats; keep the log's types stable.
+				var entry := p as Dictionary
+				var clean := {
+					"id": str(entry.get("id", "")), "at": int(entry.get("at", 0)), "provider": str(entry.get("provider", "")),
+					"test": bool(entry.get("test", false)), "transaction": str(entry.get("transaction", "")),
+				}
+				if bool(entry.get("refunded", false)):
+					clean["refunded"] = true
+				w.purchases.append(clean)
 		while w.purchases.size() > MAX_PURCHASE_LOG:
 			w.purchases.pop_front()
 	w.gift_day = str(d.get("gift_day", ""))
