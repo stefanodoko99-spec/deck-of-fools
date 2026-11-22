@@ -343,6 +343,34 @@ func leaderboard(kind: String, stake := 1) -> Dictionary:
 	return await call_api(HTTPClient.METHOD_GET, path)
 
 
+## The Playbill's items: news, What's new and banners (GET /v1/news, newest first). Public,
+## so it works without an account. Offline and in headless runs it fails like every call
+## here (ok false, status 0), and PlaybillSheet keeps showing its last copy.
+func news() -> Dictionary:
+	return await call_api(HTTPClient.METHOD_GET, "/v1/news")
+
+
+## The inbox: letters for this player and for everyone, each saying whether this account
+## claimed it (GET /v1/letters). Without a session there is nothing to ask for, so it answers
+## like a call that couldn't be made instead of spending a request on a refusal.
+func letters() -> Dictionary:
+	if token == "":
+		return { "ok": false, "status": 0, "data": {}, "error": "Your letters arrive when you're online." }
+	return await call_api(HTTPClient.METHOD_GET, "/v1/letters")
+
+
+## Claim a letter (POST /v1/letters/<id>/claim): the first claim answers { coins }, later ones
+## { coins: 0, already: true }. `key` names this claim; sending it again after an answer was
+## lost gets { coins, repeat: true }, so the coins aren't lost on the way. Only InboxSheet.claim
+## should call this: it pays the coins, once per profile.
+func claim_letter(id: int, key := "") -> Dictionary:
+	if id <= 0:
+		return { "ok": false, "status": 0, "data": {}, "error": "That isn't a letter." }
+	if token == "":
+		return { "ok": false, "status": 0, "data": {}, "error": "Claiming needs a connection." }
+	return await call_api(HTTPClient.METHOD_POST, "/v1/letters/%d/claim" % id, { "key": key } if key != "" else {})
+
+
 
 
 func _load() -> void:
