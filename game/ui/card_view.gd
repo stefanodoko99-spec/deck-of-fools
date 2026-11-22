@@ -423,12 +423,14 @@ static func suit_colour(suit: int) -> Color:
 ## the shop previews a back for sale and the gallery shows them all. Otherwise it is the
 ## player's choice, but only while they own it: after a refund, or with a cloud save
 ## from before the purchase, their cards fall back to the Harlequin rather than wear a
-## back they don't have. baked_copy() hands the bake this resolved number, so the
+## back they don't have. Ownership is asked of Game.wallet(), the wallet this build's
+## shop and store pay into (test builds keep a wallet of their own), so a back shows
+## exactly where it was bought. baked_copy() hands the bake this resolved number, so the
 ## picture always matches art_key().
 func _back_index() -> int:
 	if back_style >= 0:
 		return back_style if back_style < Settings.CARD_BACKS.size() else 0
-	return Settings.shown_back(Game.profile.wallet)
+	return Settings.shown_back(Game.wallet())
 
 
 func _draw_back(r: Rect2) -> void:

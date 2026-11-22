@@ -102,7 +102,10 @@ static func back_name(index: int) -> String:
 
 
 ## Whether the player may use card back `index`: the free ones always, the shop's
-## ones once `wallet` owns them.
+## ones once `wallet` owns them. Pass Game.wallet() here and to shown_back and
+## next_back: it is the wallet this build's shop and store pay into (a test build keeps
+## its free test purchases in a wallet of its own), so the settings, the shop and the
+## cards all agree on which backs the player has.
 static func owns_back(index: int, wallet: Wallet) -> bool:
 	if index < 0 or index >= CARD_BACKS.size():
 		return false
