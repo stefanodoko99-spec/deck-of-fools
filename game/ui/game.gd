@@ -313,9 +313,15 @@ func claim_gift() -> Dictionary:
 
 ## Pay a claimed gift's coins once more (after a rewarded ad). Only today's gift, only
 ## once, and only the coins: an ad never pays out diamonds.
+## Today's gift was claimed and hasn't been doubled yet.
+func can_double_gift() -> bool:
+	var w := wallet()
+	return w.gift_day == Economy.today() and w.gift_doubled_day != w.gift_day
+
+
 func double_gift(gift: Dictionary) -> bool:
 	var w := wallet()
-	if w.gift_day != Economy.today() or w.gift_doubled_day == w.gift_day:
+	if not can_double_gift():
 		return false
 	w.gift_doubled_day = w.gift_day
 	w.earn("coins", int(gift.get("coins", 0)))
