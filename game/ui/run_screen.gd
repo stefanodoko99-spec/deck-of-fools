@@ -104,6 +104,20 @@ var guide: Guide
 var _suggested: Array = []
 var jester_views: Array = []
 
+## Which overlay is up ("encore", "lost", "won" or ""), so a refresh that rebuilds the
+## same one doesn't play its entrance (and its sound) again.
+var _overlay_kind := ""
+## Why the last try at paying for the Encore didn't work, shown on its panel.
+var _encore_note := ""
+## Set just before the refresh that follows doubling a show's coins: the numbers the
+## coins card counts up from ({show, balance}).
+var _coins_roll: Dictionary = {}
+## A rebuild asked for while the board was busy (a resize during an ad or the
+## scoring), done at the next refresh instead of pulling the board out from under it.
+var _rebuild_pending := false
+## The finished run is being left for the menu (an intermission may play first).
+var _leaving := false
+
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -184,8 +198,12 @@ func _build_screen() -> void:
 
 
 func _rebuild_screen() -> void:
-	if busy or not is_inside_tree():
+	if not is_inside_tree():
 		return
+	if busy:
+		_rebuild_pending = true
+		return
+	_rebuild_pending = false
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -200,6 +218,8 @@ func restart() -> void:
 	selection = {}
 	custom_order.clear()
 	hand_layout = {}
+	_encore_note = ""
+	_coins_roll = {}
 	refresh()
 
 
@@ -329,6 +349,9 @@ func _counter(parent: Control, caption: String, colour: Color) -> Label:
 
 func refresh() -> void:
 	if busy or run == null:
+		return
+	if _rebuild_pending:
+		_rebuild_screen()
 		return
 	_drop_stale_selection()
 	Feel.mood(_mood(), run.town)
@@ -563,7 +586,8 @@ func _update_side() -> void:
 	var r := run
 	var daily := "" if not Game.run_meta.has("daily_date") else ("Daily practice: " if Game.run_meta.get("practice", false) else "Daily: ")
 	lbl_place.text = daily + "Town %d - %s" % [r.town, SHOW_NAMES[r.show_index]]
-	if r.phase == RunState.Phase.IN_SHOW:
+	# While an Encore is on offer the lost show's numbers stay up: they're the decision.
+	if r.phase == RunState.Phase.IN_SHOW or _encore_on_offer():
 		lbl_target_caption.text = "Score at least"
 		lbl_target.text = UiTheme.number(r.show_target)
 		lbl_score.text = UiTheme.number(r.show_score)
@@ -827,16 +851,101 @@ func _middle_show_info() -> void:
 
 
 func _middle_payout() -> void:
+	# The ducats the show paid (to spend in the Market) beside the coins it paid (kept
+	# for good), on two cards so the two currencies never blur together. The hand row
+	# is empty at a cash-out, so the cards may reach down into it.
 	var col := VBoxContainer.new()
-	col.position = Vector2(area_w / 2.0 - 100.0, 4)
+	col.position = Vector2(0, 4)
+	col.size = Vector2(area_w, 0)
+	col.add_theme_constant_override("separation", 6)
 	middle.add_child(col)
 	if run.won and not Game.win_seen:
-		col.add_child(UiTheme.label("The tour is won!", 14, UiTheme.GOLD))
+		col.add_child(_centred(UiTheme.title("The tour is won!", 16, UiTheme.GOLD)))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 10)
+	col.add_child(row)
+	row.add_child(_ducats_card())
+	var paid := _show_coins()
+	if not paid.is_empty():
+		var bonus := int(Game.run_meta.get("win_coins", 0)) if run.won and not Game.win_seen else 0
+		var coins := RunCoins.new(paid, bonus, _can_double_coins(), _coins_roll)
+		coins.double_pressed.connect(_on_double_coins)
+		row.add_child(coins)
+	_coins_roll = {}
+
+
+## The ducats the show paid, line by line like a receipt, and the total.
+func _ducats_card() -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL_DARK, UiTheme.GOLD.darkened(0.35)))
+	card.custom_minimum_size = Vector2(196, 0)
+	var lines := VBoxContainer.new()
+	lines.add_theme_constant_override("separation", 2)
+	card.add_child(lines)
+	lines.add_child(UiTheme.label("Ducats", 9, UiTheme.MUTED))
 	var total := 0
 	for p in run.payout:
 		total += int(p["v"])
-		col.add_child(UiTheme.label("%s   %+d" % [_payout_name(str(p["src"])), int(p["v"])], 10))
-	col.add_child(UiTheme.label("Total   %+d ducats" % total, 12, UiTheme.GOLD))
+		lines.add_child(_receipt_line(_payout_name(str(p["src"])), "%+d" % int(p["v"]), 10, UiTheme.TEXT))
+	var rule := ColorRect.new()
+	rule.color = Color(1, 1, 1, 0.16)
+	rule.custom_minimum_size = Vector2(0, 1)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lines.add_child(rule)
+	lines.add_child(_receipt_line("Total", "%+d ducats" % total, 12, UiTheme.GOLD))
+	return card
+
+
+func _receipt_line(caption: String, value: String, font_size: int, colour: Color) -> HBoxContainer:
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 14)
+	var key := UiTheme.label(caption, font_size, colour)
+	key.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(key)
+	line.add_child(UiTheme.label(value, font_size, colour))
+	return line
+
+
+## What the show just won paid in coins ({show, coins, doubled}), or {} when it paid
+## none, e.g. a run saved before coins existed.
+func _show_coins() -> Dictionary:
+	var paid: Variant = Game.run_meta.get("show_coins")
+	if paid is Dictionary and str((paid as Dictionary).get("show", "")) == "%d:%d" % [run.town, run.show_index]:
+		return paid
+	return {}
+
+
+## Whether to offer Double coins: once per show, when an ad may play, and not in the
+## guided first run, whose spotlight is on Cash out and whose player hasn't met coins.
+func _can_double_coins() -> bool:
+	var paid := _show_coins()
+	return not paid.is_empty() and Settings.tutorial_step < 0 and Game.can_double_show_coins() \
+		and Ads.can_offer("double_coins", { "double_used": bool(paid.get("doubled", false)) })
+
+
+## Double coins: a rewarded ad, then the show's coins paid a second time and counted up
+## on the card. The board holds still while the ad plays; Cash out is there before and
+## after, whatever the ad does.
+func _on_double_coins() -> void:
+	var paid := _show_coins()
+	if busy or paid.is_empty():
+		return
+	Feel.play("click")
+	busy = true
+	var watched: bool = await Ads.show_rewarded("double_coins", { "double_used": bool(paid.get("doubled", false)) })
+	busy = false
+	if not is_inside_tree():
+		return
+	var before := Game.profile.wallet.coins
+	var extra := Game.double_show_coins() if watched else 0
+	if extra > 0:
+		_coins_roll = { "show": int(paid.get("coins", 0)), "balance": before }
+		Feel.play("cash")
+		Feel.buzz(20)
+	elif not watched:
+		message = "The ad didn't play to the end, so the coins weren't doubled."
+	refresh()
 
 
 func _payout_name(src: String) -> String:
@@ -1107,7 +1216,7 @@ func _build_buttons() -> void:
 				total += int(p["v"])
 			_add_button("Cash out %+d" % total, func() -> void: _act({ "a": "cash_out" }), false, UiTheme.GOLD.darkened(0.25), true)
 		RunState.Phase.SHOP:
-			_add_button("Next show", func() -> void: _act({ "a": "leave_shop" }), false, UiTheme.MULT)
+			_add_button("Next show", _leave_market, false, UiTheme.MULT)
 			_add_button("Reroll %d" % r.reroll_price(), func() -> void: _act({ "a": "reroll" }), false, UiTheme.GOOD.darkened(0.3))
 		RunState.Phase.PACK:
 			if selection.get("zone", "") == "pack_item":
@@ -1171,25 +1280,42 @@ func _build_overlay() -> void:
 	var r := run
 	var lost := r.phase == RunState.Phase.LOST
 	var just_won := r.won and not Game.win_seen and r.phase == RunState.Phase.SHOP
-	if not lost and not just_won:
+	var kind := ""
+	if lost:
+		kind = "encore" if _encore_on_offer() else "lost"
+	elif just_won:
+		kind = "won"
+	var fresh := kind != _overlay_kind
+	_overlay_kind = kind
+	if kind != "encore":
+		_encore_note = ""
+	if kind == "":
 		return
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.72)
+	# Lighter behind the Encore, so the lost show's score and target stay readable.
+	shade.color = Color(0, 0, 0, 0.6 if kind == "encore" else 0.72)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(shade)
+	if kind == "encore":
+		_build_encore(fresh)
+		return
 	var accent := UiTheme.MULT if lost else UiTheme.GOLD
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", UiTheme.panel_box(UiTheme.PANEL, accent.darkened(0.2)))
 	panel.position = Vector2(110, 34)
 	panel.size = Vector2(420, 0)
+	# Near the top as before, but lifted when a long one (many Jesters, the coins line,
+	# larger text) would run off the bottom.
+	panel.resized.connect(func() -> void: panel.position.y = clampf((UiTheme.STAGE.y - panel.size.y) / 2.0, 4.0, 34.0))
 	UiTheme.stage(overlay).add_child(panel)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
-	col.add_child(_centred(UiTheme.title("The show is over" if lost else "All 8 towns conquered!", 24, accent)))
+	col.add_child(_centred(UiTheme.title("The show is over" if lost else "All %d towns conquered!" % r.final_town(), 24, accent)))
 	var what := UiTheme.name_of(r.challenge) if r.challenge != "" else "%s, Stake %d" % [UiTheme.name_of(r.deck_id), r.stake]
 	col.add_child(_centred(UiTheme.label("Town %d - %s   |   %s" % [r.town, SHOW_NAMES[r.show_index], what], 10, UiTheme.MUTED)))
+	col.add_child(RunCoins.earned_chip(Game.run_meta))
 	col.add_child(_end_stats(r))
 	if not r.zanni.is_empty():
 		col.add_child(UiTheme.label("Your Jesters", 9, UiTheme.MUTED))
@@ -1222,16 +1348,125 @@ func _build_overlay() -> void:
 			refresh(), 13, UiTheme.MULT))
 	if daily:
 		buttons_row.add_child(UiTheme.button("Leaderboards", func() -> void: _open(LeaderboardSheet.new("daily")), 12, UiTheme.GOLD.darkened(0.3)))
-	buttons_row.add_child(UiTheme.button("Main menu", func() -> void:
-		Game.finish_run()
-		back_to_menu.emit(), 12, UiTheme.POINTS))
+	buttons_row.add_child(UiTheme.button("Main menu", _leave_to_menu, 12, UiTheme.POINTS))
+	if fresh:
+		_pop_in(panel)
+
+
+## Overlay panels scale up and fade in when they first appear.
+func _pop_in(panel: Control) -> void:
+	if Settings.reduce_motion:
+		return
+	panel.pivot_offset = panel.size / 2.0
+	panel.resized.connect(func() -> void: panel.pivot_offset = panel.size / 2.0)
+	panel.scale = Vector2(0.9, 0.9)
+	panel.modulate.a = 0.0
+	var t := panel.create_tween().set_parallel()
+	t.tween_property(panel, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_property(panel, "modulate:a", 1.0, 0.18)
+
+
+## Main menu from a finished run (lost, or won and left). The end of a run is one of
+## the two natural breaks where an intermission may play first; AdPolicy decides, and
+## usually nothing shows.
+func _leave_to_menu() -> void:
+	if _leaving:
+		return
+	_leaving = true
+	Game.finish_run()
+	await Ads.intermission("run_end")
+	back_to_menu.emit()
+
+
+## Whether the Encore panel belongs on screen: the show is lost, the run may play on,
+## and the player hasn't said No thanks (that finishes the run, which Game.encore_open
+## doesn't look at, so `recorded` is checked here too).
+func _encore_on_offer() -> bool:
+	return run != null and run.phase == RunState.Phase.LOST and Game.encore_open() and not Game.recorded
+
+
+## The Encore offer, in place of the run-over screen. It comes back as it was when the
+## app is reopened on a lost run that may still take one (Game.continue_run).
+func _build_encore(fresh: bool) -> void:
+	var panel := EncorePanel.new(run, _encore_note)
+	panel.chose.connect(_take_encore)
+	panel.declined.connect(_decline_encore)
+	panel.resized.connect(func() -> void: panel.position = ((UiTheme.STAGE - panel.size) / 2.0).floor())
+	UiTheme.stage(overlay).add_child(panel)
+	if fresh:
+		Feel.play("show")
+		_pop_in(panel)
+
+
+## Pays for the Encore the way the player chose. An ad has to play to the end first;
+## the other ways are paid at once (Game.take_encore checks the wallet and the ticket).
+## On success the lost show goes on, with the board back and a fresh hand dealt.
+func _take_encore(paid_with: String) -> void:
+	if busy or not _encore_on_offer():
+		return
+	Feel.play("click")
+	if paid_with == "ad":
+		if not Ads.can_offer("encore", EncorePanel.ad_context(run)):
+			_encore_note = "No ad is available right now."
+			refresh()
+			return
+		busy = true
+		var watched: bool = await Ads.show_rewarded("encore", EncorePanel.ad_context(run))
+		busy = false
+		if not is_inside_tree():
+			return
+		if not watched:
+			_encore_note = "The ad didn't play to the end, so there's no Encore yet."
+			refresh()
+			return
+	var reason := Game.take_encore(paid_with)
+	if reason != "":
+		Feel.play("error")
+		_encore_note = reason
+		refresh()
+		return
+	# Game.take_encore has already refreshed the board into the show again.
+	_encore_fanfare()
+
+
+## No thanks: the run ends, and the usual run-over screen takes the Encore's place.
+func _decline_encore() -> void:
+	if busy or not _encore_on_offer():
+		return
+	Feel.play("click")
+	Game.decline_encore()
+
+
+## The crowd cheers the Encore in: applause, a banner over the board, the new cards
+## dealt and the extra hand and discard flying up from their counters. Nothing here
+## waits, so the player can go straight on.
+func _encore_fanfare() -> void:
+	Feel.play("applause")
+	Feel.play("deal", 1.1)
+	Feel.buzz(30)
+	Feel.celebrate(0.4)
+	Feel.flash(UiTheme.GOLD, 0.35)
+	var l := UiTheme.title("Encore!", 38, UiTheme.GOLD)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.size = Vector2(area_w, 56)
+	l.position = Vector2(AREA_X, 104)
+	l.pivot_offset = l.size / 2.0
+	stage.add_child(l)
+	var t := l.create_tween()
 	if not Settings.reduce_motion:
-		panel.pivot_offset = panel.size / 2.0
-		panel.scale = Vector2(0.9, 0.9)
-		panel.modulate.a = 0.0
-		var t := panel.create_tween().set_parallel()
-		t.tween_property(panel, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		t.tween_property(panel, "modulate:a", 1.0, 0.18)
+		l.scale = Vector2(0.2, 0.2)
+		l.rotation = -0.15
+		t.tween_property(l, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		t.parallel().tween_property(l, "rotation", 0.0, 0.3)
+	t.tween_interval(0.8)
+	t.tween_property(l, "modulate:a", 0.0, 0.3)
+	t.tween_callback(l.queue_free)
+	# The side counters are narrow, so each just gets its "+1" in its own colour.
+	for pair: Array in [[lbl_hands, Economy.ENCORE_HANDS, UiTheme.POINTS], [lbl_discards, Economy.ENCORE_DISCARDS, UiTheme.MULT]]:
+		var counter := (pair[0] as Label).get_parent().get_parent() as Control
+		Feel.float_text("+%d" % int(pair[1]), counter.get_global_rect().get_center() - Vector2(0, 18), (pair[2] as Color).lightened(0.3), 14)
+		if not Settings.reduce_motion:
+			_punch(counter)
 
 
 
@@ -1292,7 +1527,12 @@ func _on_tap(view: CardView) -> void:
 
 
 func _act(action: Dictionary) -> void:
-	var result := Game.act(action, true)
+	_acted(action, Game.act(action, true))
+	Game.changed.emit()
+
+
+## What every action says and sounds like once the run has applied it (or refused).
+func _acted(action: Dictionary, result: Dictionary) -> void:
 	message = "" if result["ok"] else _sentence(str(result["error"]))
 	if result["ok"]:
 		selected_hand.clear()
@@ -1302,6 +1542,23 @@ func _act(action: Dictionary) -> void:
 			Feel.play("lose")
 	else:
 		Feel.play("error")
+
+
+## Next show. When that show is in a new town, this is a natural break between towns,
+## where an intermission may play before the new town's board appears. AdPolicy
+## decides, and usually nothing shows: never for new players or supporters, never in
+## the guided first run, and never more often than its caps.
+func _leave_market() -> void:
+	if busy:
+		return
+	var action := { "a": "leave_shop" }
+	var town := run.town
+	var result := Game.act(action, true)
+	_acted(action, result)
+	if result["ok"] and run.town > town:
+		busy = true
+		await Ads.intermission("town_break")
+		busy = false
 	Game.changed.emit()
 
 
