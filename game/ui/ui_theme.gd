@@ -350,6 +350,20 @@ static func icon_button(icon: String, on_press: Callable, diameter := 26.0, colo
 	return b
 
 
+## A coin or diamond amount: the symbol and the number, e.g. for prices and balances.
+static func currency(kind: String, amount: int, size := 10, colour := TEXT) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon := CurrencyIcon.new(kind, px(size) * 1.25)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(icon)
+	var l := label(number(amount), size, colour)
+	l.add_theme_font_override("font", bold)
+	row.add_child(l)
+	return row
+
+
 static func switch(on: bool, changed: Callable) -> UiSwitch:
 	var sw := UiSwitch.new(on)
 	sw.toggled.connect(changed)
