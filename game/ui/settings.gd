@@ -84,6 +84,9 @@ static func save() -> void:
 			"card_back": card_back, "seen_help": seen_help, "asked_account": asked_account,
 			"tutorial_step": tutorial_step, "look": LOOK_VERSION,
 		}))
+		f.flush()
+		f.close()
+		WebSave.backup()
 
 
 

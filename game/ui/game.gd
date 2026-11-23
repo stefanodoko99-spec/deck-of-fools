@@ -37,6 +37,9 @@ var money_mode := "off"
 
 
 func _ready() -> void:
+	# Web builds normally save through IndexedDB. Recover its core files from the
+	# synchronous browser safety copy if iOS suspended the app before a sync finished.
+	WebSave.restore_missing()
 	ContentPacks.register_all()
 	TranslationServer.set_locale("en")
 	money_mode = Monetization.mode()
@@ -130,6 +133,7 @@ func adopt_cloud(data: Dictionary) -> void:
 		_save_json(RUN_META_PATH, run_meta, false)
 	elif FileAccess.file_exists(RUN_PATH):
 		DirAccess.remove_absolute(RUN_PATH)
+	WebSave.backup()
 	changed.emit()
 
 
@@ -371,6 +375,7 @@ func finish_run() -> void:
 	_save_json(PROFILE_PATH, profile.to_dict())
 	if FileAccess.file_exists(RUN_PATH):
 		DirAccess.remove_absolute(RUN_PATH)
+	WebSave.backup()
 	WebStatus.publish(null)
 	# Quick runs and boss rushes are just for fun: only the tour is ranked, and a run
 	# that took an Encore isn't ranked either.
@@ -436,6 +441,9 @@ func _save_json(path: String, data: Dictionary, changed_here := true) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify(data))
+		f.flush()
+		f.close()
+		WebSave.backup()
 	if changed_here:
 		Online.mark_dirty()
 

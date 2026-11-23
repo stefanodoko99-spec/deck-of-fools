@@ -197,6 +197,14 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
    Safari and other browsers without one get a short sheet of steps. */
 (function () {
 	var deferred = null;
+	// Ask the browser to keep the installed game's IndexedDB when it is able to.
+	// The request is repeated from user gestures because some browsers require one.
+	window.dofKeepData = function () {
+		try {
+			if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+		} catch (e) {}
+	};
+	window.dofKeepData();
 	window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; });
 	window.addEventListener('appinstalled', function () { deferred = null; installed = true; });
 	var installed = false;
@@ -224,7 +232,7 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 	var PLUS = '<span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="#fbf3e4" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span>';
 	var DOTS = '<span class="glyph"><svg viewBox="0 0 24 24" fill="#fbf3e4"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>';
 	var STEPS = {
-		ios: ['Tap ' + SHARE + ' <b>Share</b> in the browser toolbar.', 'Scroll down and tap ' + PLUS + ' <b>Add to Home Screen</b>.', 'Open <b>Deck of Fools</b> from your Home Screen. It plays full screen and works offline.'],
+		ios: ['If you already played in Safari, sign in first so you can bring that progress into the app.', 'Tap ' + SHARE + ' <b>Share</b> in the browser toolbar.', 'Scroll down and tap ' + PLUS + ' <b>Add to Home Screen</b>.', 'Open <b>Deck of Fools</b> from your Home Screen. It keeps its own progress, plays full screen and works offline.'],
 		mac: ['In Safari, open the <b>File</b> menu.', 'Choose <b>Add to Dock</b>, then <b>Add</b>.', 'Open <b>Deck of Fools</b> from your Dock or Launchpad.'],
 		android: ['Tap ' + DOTS + ' the browser menu.', 'Tap <b>Install app</b> or <b>Add to Home screen</b>.', 'Open <b>Deck of Fools</b> from your home screen.'],
 		desktop: ['Click the install icon at the right of the address bar, or open ' + DOTS + ' the browser menu.', 'Choose <b>Install Deck of Fools</b>.', 'It opens in its own window, like any app.'],
@@ -263,6 +271,7 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 	});
 	document.addEventListener('dblclick', function (e) { e.preventDefault(); }, { passive: false });
 	window.dofInstall = function () {
+		window.dofKeepData();
 		if (deferred) {
 			var prompt = deferred;
 			deferred = null;
@@ -462,6 +471,7 @@ const dofStart = (function () {
 
 	function choose(choice) {
 		if (phase !== 'ready') return;
+		if (window.dofKeepData) window.dofKeepData();
 		phase = 'closed';
 		window.dofStartChoice = choice;
 		root.setAttribute('aria-hidden', 'true');
