@@ -1,0 +1,110 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Set up Godot 4.7.2
+        uses: chickensoft-games/setup-godot@v2.4.3
+        with:
+          version: 4.7.2
+          use-dotnet: false
+          include-templates: true
+
+      - name: Verify toolchain
+        run: |
+          node --version
+          godot --version
+
+      - name: Run tests
+        run: ./test.sh --fast
+
+      - name: Build web release
+        run: ./build.sh
+
+      - name: Upload production build
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-web
+          path: build/web
+          if-no-files-found: error
+          retention-days: 3
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: build
+    if: vars.CLOUDFLARE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download production build
+        uses: actions/download-artifact@v8
+        with:
+          name: production-web
+          path: build/web
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: api
+          command: d1 migrations apply deck-of-fools --remote
+
+      - name: Deploy API Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: api
+          command: deploy
+
+      - name: Deploy game Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: site
+          command: deploy
+
+      - name: Verify production
+        run: |
+          curl --fail --retry 5 --retry-delay 5 \
+            https://deck-of-fools.stefanodoko-radari.workers.dev/ \
+            | grep -q "dof-centre"
+          curl --fail --retry 5 --retry-delay 5 \
+            https://deck-of-fools-api.stefanodoko-radari.workers.dev/v1/news \
+            | grep -q '"news"'

@@ -29,6 +29,21 @@ cd site && npx wrangler deploy
 
 `index.wasm` is about 38 MiB, over the 25 MiB limit for a Workers static asset, so `build.sh` ships it as `index.wasm.gz` and `site/worker.js` serves it with `Content-Encoding: gzip`.
 
+### Automatic production deploys
+
+`.github/workflows/deploy.yml` tests and builds the game, applies pending D1
+migrations, deploys the API and game Workers, and verifies both production URLs
+on every push to `main`. It can also be run manually from GitHub Actions.
+
+The repository needs these GitHub Actions secrets:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN` with permission to deploy Workers and apply D1 migrations
+
+Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED` to `true` after both
+secrets are configured. Set it to `false` to pause production deploys while
+keeping tests and web builds active.
+
 ## Run the tests
 
 ```sh
