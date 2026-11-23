@@ -81,7 +81,10 @@ static func backup() -> void:
 static func decode(text: String) -> Dictionary:
 	if text.is_empty() or text.length() > MAX_FILE_CHARS * FILES.size():
 		return {}
-	var value: Variant = JSON.parse_string(text)
+	var parser := JSON.new()
+	if parser.parse(text) != OK:
+		return {}
+	var value: Variant = parser.data
 	if not value is Dictionary:
 		return {}
 	var payload: Dictionary = value
@@ -97,7 +100,8 @@ static func decode(text: String) -> Dictionary:
 static func valid_json_file(text: String) -> bool:
 	if text.is_empty() or text.length() > MAX_FILE_CHARS:
 		return false
-	return JSON.parse_string(text) is Dictionary
+	var parser := JSON.new()
+	return parser.parse(text) == OK and parser.data is Dictionary
 
 
 static func _valid_file(path: String) -> bool:
