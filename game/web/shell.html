@@ -65,13 +65,15 @@
 	--wine: #4f1230;
 	--brick: #8a2a17;
 	--green: #0f6e4f;
+	--green-deep: #084a3b;
 	--cream: #fbf3e4;
 	--ink: #1d1230;
 	--heart: #ef2d56;
+	--gold: #f0b84a;
 	--ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
 	--art: 27%;
 }
-html, body { margin: 0; padding: 0; border: 0; position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--green); color: var(--cream); }
+html, body { margin: 0; padding: 0; border: 0; position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--ink); color: var(--cream); }
 /* Edge to edge on iPhone: the canvas runs under the notch, the Dynamic Island and the
    home indicator (viewport-fit=cover); the game keeps its controls inside the safe
    area itself (UiTheme.safe_area). No bounce, zoom, text selection or long-press
@@ -81,51 +83,59 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 #canvas:focus { outline: none; }
 .dof-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
-#status { position: fixed; inset: 0; z-index: 5; display: flex; overflow: hidden; font-family: var(--ui); -webkit-font-smoothing: antialiased; cursor: default; }
+#status { position: fixed; inset: 0; z-index: 5; display: flex; overflow: hidden; isolation: isolate; font-family: var(--ui); -webkit-font-smoothing: antialiased; cursor: default; }
 /* The two halves: each is an illustration and half of the green field, so the card
    can split down its middle. */
 .dof-half { flex: 1 1 50%; display: flex; min-width: 0; will-change: transform; transition: transform .74s cubic-bezier(.7, 0, .24, 1); }
 .dof-half.right { flex-direction: row-reverse; }
-.dof-art { position: relative; flex: 0 0 calc(var(--art) * 2); overflow: hidden; }
-.dof-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dof-art { position: relative; flex: 0 0 calc(var(--art) * 2); overflow: hidden; background: var(--ink); }
+.dof-art::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 54px rgba(15, 3, 28, .28); }
+.dof-art.arl::after { background: linear-gradient(90deg, transparent 64%, rgba(29, 18, 48, .7)); }
+.dof-art.zan::after { background: linear-gradient(-90deg, transparent 64%, rgba(29, 18, 48, .7)); }
+.dof-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(1.04) contrast(1.03); transform: scale(1.015); }
 .dof-art.arl { background: var(--wine); }
 .dof-art.arl img { object-position: 60% 30%; }
 .dof-art.zan { background: var(--brick); }
 .dof-art.zan img { object-position: 64% 30%; }
-.dof-green { flex: 1 1 auto; background: var(--green); }
+.dof-green { flex: 1 1 auto; background: var(--ink); }
 
-.dof-centre { position: absolute; top: 0; bottom: 0; left: var(--art); right: var(--art); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(16px, env(safe-area-inset-top)) clamp(14px, 3vw, 40px) max(34px, env(safe-area-inset-bottom)); box-sizing: border-box; text-align: center; transition: opacity .28s ease, transform .5s ease; }
-.dof-title { display: block; width: min(88%, 720px); height: auto; color: var(--cream); overflow: visible; }
-.dof-tagline { margin: .75em 0 0; font-weight: 600; font-size: clamp(12px, 1.4vh + .45vw, 18px); line-height: 1.3; color: rgba(251, 243, 228, .8); }
+.dof-centre { position: absolute; top: 0; bottom: 0; left: var(--art); right: var(--art); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(24px, env(safe-area-inset-top)) clamp(20px, 3.4vw, 52px) max(36px, env(safe-area-inset-bottom)); box-sizing: border-box; overflow: hidden; text-align: center; background-color: var(--ink); background-image: linear-gradient(45deg, rgba(240,184,74,.035) 25%, transparent 25%, transparent 75%, rgba(240,184,74,.035) 75%), linear-gradient(45deg, rgba(240,184,74,.035) 25%, transparent 25%, transparent 75%, rgba(240,184,74,.035) 75%), radial-gradient(ellipse at 50% 48%, rgba(15,110,79,.68) 0%, rgba(8,74,59,.35) 42%, rgba(29,18,48,0) 74%); background-position: 0 0, 24px 24px, center; background-size: 48px 48px, 48px 48px, 100% 100%; transition: opacity .28s ease, transform .5s ease; }
+.dof-centre::before { content: ""; position: absolute; inset: clamp(10px, 1.5vw, 20px); border: 1px solid rgba(240,184,74,.34); border-radius: 18px; box-shadow: inset 0 0 34px rgba(240,184,74,.06), 0 12px 40px rgba(4,0,10,.28); pointer-events: none; }
+.dof-centre::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: 10%; height: 36%; border-radius: 50%; background: rgba(15,110,79,.18); filter: blur(42px); pointer-events: none; }
+.dof-centre > * { position: relative; z-index: 1; }
+.dof-title { display: block; flex: none; width: min(84%, 680px); height: clamp(48px, 10.5vh, 82px); color: var(--cream); overflow: visible; filter: drop-shadow(0 5px 12px rgba(4,0,10,.48)); }
+.dof-tagline { flex: none; margin: clamp(20px, 2.8vh, 28px) 0 0; font-weight: 650; font-size: clamp(11px, 1.15vh + .36vw, 16px); line-height: 1.3; letter-spacing: .025em; color: rgba(251,243,228,.76); }
 
 /* The hand: five cards in a shallow fan. */
-.dof-hand { --cw: clamp(40px, min(12vh, 6.6vw), 88px); display: flex; justify-content: center; align-items: center; height: calc(var(--cw) * 1.55); margin: clamp(10px, 4vh, 40px) 0 clamp(6px, 2.4vh, 22px); perspective: 900px; }
-.dof-slot { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); margin: 0 calc(var(--cw) * -.07); }
-.dof-slot:nth-child(1) { transform: translateY(9%) rotate(-10deg); }
-.dof-slot:nth-child(2) { transform: translateY(2.5%) rotate(-5deg); }
-.dof-slot:nth-child(4) { transform: translateY(2.5%) rotate(5deg); }
-.dof-slot:nth-child(5) { transform: translateY(9%) rotate(10deg); }
-.dof-card { width: 100%; height: 100%; opacity: 0; transform: translateY(30%) scale(.94); transition: transform .46s cubic-bezier(.2, .8, .2, 1), opacity .3s ease; transition-delay: calc(var(--i) * 70ms); }
+.dof-hand { --cw: clamp(42px, min(13vh, 7vw), 92px); display: flex; justify-content: center; align-items: center; height: calc(var(--cw) * 1.64); margin: clamp(8px, 2.8vh, 25px) 0 clamp(5px, 1.4vh, 12px); perspective: 1000px; transition: transform .48s cubic-bezier(.16,1,.3,1), filter .48s cubic-bezier(.16,1,.3,1); }
+.dof-slot { position: relative; width: var(--cw); height: calc(var(--cw) * 1.4); margin: 0 calc(var(--cw) * -.055); transform-origin: 50% 115%; }
+.dof-slot:nth-child(1) { transform: translateY(13%) rotate(-13deg); }
+.dof-slot:nth-child(2) { transform: translateY(4%) rotate(-6deg); }
+.dof-slot:nth-child(4) { transform: translateY(4%) rotate(6deg); }
+.dof-slot:nth-child(5) { transform: translateY(13%) rotate(13deg); }
+.dof-card { width: 100%; height: 100%; opacity: 0; transform: translateY(34%) scale(.9); transition: transform .54s cubic-bezier(.16,1,.3,1), opacity .3s ease; transition-delay: calc(var(--i) * 70ms); }
 .dealt .dof-card { opacity: 1; transform: none; }
 .dof-flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .56s cubic-bezier(.3, .7, .2, 1); }
 .up .dof-flip { transform: rotateY(180deg); }
-.dof-face { position: absolute; inset: 0; border-radius: calc(var(--cw) * .12); overflow: hidden; -webkit-backface-visibility: hidden; backface-visibility: hidden; box-shadow: 0 calc(var(--cw) * .08) calc(var(--cw) * .2) rgba(4, 30, 21, .35), 0 1px 2px rgba(4, 30, 21, .3); }
+.dof-face { position: absolute; inset: 0; border-radius: calc(var(--cw) * .12); overflow: hidden; -webkit-backface-visibility: hidden; backface-visibility: hidden; box-shadow: 0 calc(var(--cw) * .11) calc(var(--cw) * .28) rgba(4,0,10,.48), 0 2px 4px rgba(4,0,10,.36); }
 .dof-face > svg { display: block; width: 100%; height: 100%; }
 .dof-front { transform: rotateY(180deg); background: #fffaf2; color: var(--heart); }
 .dof-front .rank { position: absolute; left: 10%; top: 8%; width: 46%; height: 27%; }
 .dof-front .pip { position: absolute; left: 11%; top: 40%; width: 20%; height: auto; aspect-ratio: 100 / 92; }
 .dof-front .big { position: absolute; right: 9%; bottom: 8%; width: 50%; height: auto; aspect-ratio: 100 / 92; }
 
-.dof-status { min-height: 1.4em; font-weight: 650; font-size: clamp(13px, 1.5vh + .4vw, 17px); line-height: 1.4; color: var(--cream); font-variant-numeric: tabular-nums; }
-.dof-go { display: none; flex-direction: column; align-items: center; margin-top: clamp(8px, 2.4vh, 18px); }
-.ready .dof-go { display: flex; animation: dof-rise .42s cubic-bezier(.2, .8, .2, 1) both; }
-.dof-play { appearance: none; -webkit-appearance: none; border: 0; border-radius: 999px; min-width: 200px; min-height: clamp(46px, 11vh, 56px); padding: 6px clamp(28px, 4vw, 44px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font: 800 clamp(16px, 2vh + .4vw, 20px)/1.15 var(--ui); color: var(--ink); background: var(--cream); cursor: pointer; box-shadow: 0 10px 24px rgba(4, 30, 21, .32); transition: transform .12s ease; }
+.dof-status { min-height: 1.4em; font-weight: 750; font-size: clamp(12px, 1.25vh + .36vw, 16px); line-height: 1.4; letter-spacing: .015em; color: var(--gold); font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(4,0,10,.5); }
+.dof-go { display: none; flex-direction: column; align-items: center; margin-top: clamp(7px, 1.6vh, 14px); }
+.ready .dof-hand { transform: translateY(-2px) scale(1.035); filter: drop-shadow(0 8px 18px rgba(4,0,10,.2)); }
+.ready .dof-go { display: flex; animation: dof-rise .5s cubic-bezier(.16,1,.3,1) both; }
+.dof-play { appearance: none; -webkit-appearance: none; border: 0; border-radius: 14px; min-width: clamp(210px, 24vw, 280px); min-height: clamp(48px, 8vh, 60px); padding: 7px clamp(30px, 4vw, 48px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font: 850 clamp(17px, 1.75vh + .5vw, 22px)/1.12 var(--ui); letter-spacing: -.02em; color: var(--ink); background: var(--cream); cursor: pointer; box-shadow: 0 10px 28px rgba(4,0,10,.44); transition: transform .16s cubic-bezier(.16,1,.3,1), box-shadow .16s ease, background-color .16s ease; }
 .dof-play small { font-size: .72em; font-weight: 600; color: rgba(29, 18, 48, .66); }
-.dof-play:active { transform: scale(.96); }
-.dof-play:focus-visible, .dof-alt:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+.dof-play:hover { background: #fffaf0; transform: translateY(-2px); box-shadow: 0 14px 32px rgba(4,0,10,.5); }
+.dof-play:active { transform: translateY(1px) scale(.985); box-shadow: 0 6px 17px rgba(4,0,10,.42); }
+.dof-play:focus-visible, .dof-alt:focus-visible { outline: 3px solid var(--gold); outline-offset: 4px; }
 .dof-alt { appearance: none; -webkit-appearance: none; border: 0; background: none; margin-top: 4px; padding: 10px 16px; font: 600 clamp(13px, 1.4vh + .3vw, 15px)/1 var(--ui); color: var(--cream); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(251, 243, 228, .5); }
 .dof-alt[hidden] { display: none; }
-.dof-tip { position: absolute; left: 14px; right: 14px; bottom: max(12px, env(safe-area-inset-bottom)); margin: 0; font-weight: 500; font-size: clamp(11px, 1.3vh + .2vw, 14px); line-height: 1.35; color: rgba(251, 243, 228, .72); transition: opacity .4s ease; }
+.dof-tip { position: absolute; left: 14px; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); margin: 0; font-weight: 550; font-size: clamp(10px, 1.05vh + .2vw, 13px); line-height: 1.35; color: rgba(251,243,228,.58); transition: opacity .4s ease; }
 .ready .dof-tip, .failed .dof-tip { opacity: 0; }
 .dof-notice { display: none; max-width: 440px; margin: 0; font-weight: 600; font-size: 15px; line-height: 1.45; color: var(--cream); }
 .failed .dof-notice { display: block; }
@@ -138,7 +148,7 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 #status.parting .dof-half.right { transform: translateX(101%); }
 #status.parting .dof-centre { opacity: 0; transform: scale(.97); }
 #status.fading { opacity: 0; transition: opacity .22s ease; pointer-events: none; }
-@keyframes dof-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes dof-rise { from { opacity: 0; transform: translateY(14px) scale(.97); filter: blur(5px); } to { opacity: 1; transform: none; filter: blur(0); } }
 
 /* Upright windows (an iPad in portrait, a narrow desktop window): the illustrations
    sit side by side on top, the title below. Upright phones get the turn hint. */
@@ -146,8 +156,23 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 	.dof-half { flex-direction: column; }
 	.dof-half.right { flex-direction: column; }
 	.dof-art { flex: 0 0 46%; }
-	.dof-centre { left: 0; right: 0; top: 46%; padding-top: 12px; }
-	.dof-title { width: min(84%, 640px); }
+	.dof-centre { left: 0; right: 0; top: 46%; padding: 16px 20px max(26px, env(safe-area-inset-bottom)); }
+	.dof-centre::before { inset: 8px; }
+	.dof-title { width: min(78%, 620px); height: clamp(34px, 8vh, 66px); }
+	.dof-tagline { margin-top: 12px; }
+	.dof-hand { --cw: clamp(38px, min(9.5vh, 10vw), 78px); margin: 6px 0 3px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+	.dof-centre { padding-top: max(12px, env(safe-area-inset-top)); padding-bottom: max(15px, env(safe-area-inset-bottom)); }
+	.dof-centre::before { inset: 7px 10px; border-radius: 14px; }
+	.dof-title { height: clamp(34px, 10.5vh, 50px); width: min(74%, 560px); }
+	.dof-tagline { display: none; }
+	.dof-hand { --cw: clamp(36px, min(14vh, 7vw), 62px); margin: 10px 0 1px; }
+	.dof-status { font-size: clamp(11px, 3.2vh, 14px); }
+	.dof-go { margin-top: 4px; }
+	.dof-play { min-height: 42px; min-width: 200px; font-size: 17px; }
+	.dof-tip { bottom: max(8px, env(safe-area-inset-bottom)); font-size: 10px; }
 }
 
 /* Phones held upright: the game is landscape only. */
@@ -185,7 +210,7 @@ body, #canvas { -webkit-touch-callout: none; -webkit-user-select: none; user-sel
 	#install-sheet .close { top: 10px; right: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
-	.dof-card, .dof-flip, .dof-half, .dof-centre, .dof-tip { transition: none; }
+	.dof-card, .dof-flip, .dof-half, .dof-centre, .dof-hand, .dof-play, .dof-tip { transition: none; }
 	.ready .dof-go, #install-sheet .card { animation: none; }
 	#rotate-hint .phone { animation: none; transform: rotate(-90deg); }
 }
